@@ -504,11 +504,60 @@ if [[ -n "$CH_SELECTION" ]]; then
         case "$ch_num" in
             1)
                 info "Telegram setup"
-                dimtext "Create a bot: talk to @BotFather on Telegram"
-                val=$(ask "  Bot token: ")
-                [[ -n "$val" ]] && set_env "TELEGRAM_BOT_TOKEN" "$val" && ok "Telegram bot token saved"
-                val=$(ask "  Chat ID: ")
-                [[ -n "$val" ]] && set_env "TELEGRAM_CHAT_ID" "$val" && ok "Telegram chat ID saved"
+                dimtext "1. Open Telegram and talk to @BotFather"
+                dimtext "2. Send /newbot and follow the prompts"
+                dimtext "3. Copy the bot token and paste it below"
+                printf "\n"
+                TG_TOKEN=$(ask "  Bot token: ")
+                if [[ -n "$TG_TOKEN" ]]; then
+                    set_env "TELEGRAM_BOT_TOKEN" "$TG_TOKEN"
+                    ok "Bot token saved"
+
+                    # Validate token with getMe
+                    TG_ME=$(curl -sf "https://api.telegram.org/bot${TG_TOKEN}/getMe" 2>/dev/null || echo "")
+                    TG_BOT_NAME=$(printf '%s' "$TG_ME" | jq -r '.result.username // ""' 2>/dev/null || echo "")
+                    if [[ -n "$TG_BOT_NAME" ]]; then
+                        ok "Bot verified: @$TG_BOT_NAME"
+                    else
+                        warn "Could not verify bot token — check it later in usr/.env"
+                    fi
+
+                    # Generate pairing code
+                    PAIR_CODE="BRV-$(LC_ALL=C tr -dc 'A-Z0-9' < /dev/urandom 2>/dev/null | head -c 6)"
+
+                    # Clear old updates so we only see new ones
+                    curl -sf "https://api.telegram.org/bot${TG_TOKEN}/getUpdates?offset=-1" > /dev/null 2>&1 || true
+                    sleep 1
+                    LAST_ID=$(curl -sf "https://api.telegram.org/bot${TG_TOKEN}/getUpdates" 2>/dev/null \
+                        | jq -r '.result[-1].update_id // 0' 2>/dev/null || echo "0")
+                    OFFSET=$((LAST_ID + 1))
+
+                    printf "\n"
+                    printf "  ${BRED}${BOLD}Pairing:${RST} briven pair ${BRED}${BOLD}%s${RST}\n" "$PAIR_CODE"
+                    printf "\n"
+                    dimtext "Open your bot in Telegram and send the command above."
+                    dimtext "Waiting for pairing message (60s)..."
+                    printf "\n"
+
+                    TG_CHAT_ID=""
+                    for _try in $(seq 1 30); do
+                        UPDATES=$(curl -sf "https://api.telegram.org/bot${TG_TOKEN}/getUpdates?offset=${OFFSET}&timeout=2" 2>/dev/null || echo '{"result":[]}')
+                        # Look for our pairing code in any message
+                        TG_CHAT_ID=$(printf '%s' "$UPDATES" | jq -r \
+                            "[.result[].message | select(.text != null) | select(.text | ascii_upcase | contains(\"$PAIR_CODE\"))] | .[0].chat.id // empty" \
+                            2>/dev/null || echo "")
+                        if [[ -n "$TG_CHAT_ID" ]]; then
+                            break
+                        fi
+                    done
+
+                    if [[ -n "$TG_CHAT_ID" ]]; then
+                        set_env "TELEGRAM_CHAT_ID" "$TG_CHAT_ID"
+                        ok "Telegram paired! Chat ID: $TG_CHAT_ID"
+                    else
+                        warn "Pairing timed out — set TELEGRAM_CHAT_ID manually in usr/.env"
+                    fi
+                fi
                 ;;
             2)
                 info "WhatsApp Business setup"
