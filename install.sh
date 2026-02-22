@@ -144,10 +144,10 @@ if pip install -r requirements.txt > "$PIP_LOG" 2>&1; then
     ok "Dependencies installed."
 else
     if grep -qi "kokoro" "$PIP_LOG"; then
-        warn "kokoro failed on Python 3.13 — pinning kokoro==0.7.16..."
-        sed -i 's/kokoro[^#]*$/kokoro==0.7.16/' requirements.txt
+        warn "kokoro failed on Python 3.13 — pinning kokoro==0.7.4..."
+        sed -i 's/kokoro[^#]*$/kokoro==0.7.4/' requirements.txt
         if pip install -r requirements.txt > "$PIP_LOG" 2>&1; then
-            ok "Dependencies installed (kokoro pinned to 0.7.16)."
+            ok "Dependencies installed (kokoro pinned to 0.7.4)."
         else
             cat "$PIP_LOG" >&2
             err "pip install failed even with kokoro pinned. See output above."
