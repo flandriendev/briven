@@ -14,6 +14,7 @@ services:
 
     environment:
       - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+      - TAILSCALE_API_KEY=${TAILSCALE_API_KEY:-}
       - BRIVEN_PORT=${BRIVEN_PORT:-8000}
 
     # Localhost-only — no public exposure.

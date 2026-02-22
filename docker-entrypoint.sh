@@ -54,6 +54,16 @@ if [[ -f usr/.env && "$BIND_HOST" != "0.0.0.0" ]]; then
     fi
 fi
 
+# ── Tailscale ACL enforcement (if API key provided) ──────────
+if [[ -n "${TAILSCALE_API_KEY:-}" ]]; then
+    echo "[briven] Applying Tailscale ACL policy..."
+    if python tools/tailscale.py --apply-acl 2>&1; then
+        echo "[briven] ACL policy active."
+    else
+        echo "[briven] WARNING: ACL apply failed — check TAILSCALE_API_KEY"
+    fi
+fi
+
 # ── Start Briven ─────────────────────────────────────────────
 echo "[briven] Starting on $BIND_HOST:$BRIVEN_PORT"
-exec python run_ui.py --host "$BIND_HOST" --port "$BRIVEN_PORT"
+exec uvicorn run_ui:app --host "$BIND_HOST" --port "$BRIVEN_PORT"

@@ -12,7 +12,7 @@
 [![GitHub](https://img.shields.io/badge/GitHub-flandriendev%2Fbriven-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/flandriendev/briven)
 [![Website](https://img.shields.io/badge/Website-briven.ai-blue?style=for-the-badge&logo=safari&logoColor=white)](https://briven.ai)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](./LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.13-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Tailscale](https://img.shields.io/badge/Networking-Tailscale-4B32C3?style=for-the-badge&logo=tailscale&logoColor=white)](https://tailscale.com)
 
 ## Documentation
@@ -44,23 +44,30 @@
 
 ### Native Install (recommended)
 
-One command on a fresh Ubuntu 22.04/24.04 VPS — installs Python 3.12, Tailscale, and creates a systemd service:
+One command on a fresh VPS — installs Python, Tailscale, and creates a systemd service:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
-The script will prompt you for a [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) to enable zero-trust networking (no exposed ports). After install:
+The script will prompt you for:
+1. A [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) to enable zero-trust networking (no exposed ports)
+2. A [Tailscale API access token](https://login.tailscale.com/admin/settings/keys) to enforce ACL policy (optional — restricts access to `tag:admin` → `tag:briven-server:8000`)
+
+After install:
 
 ```bash
 nano ~/briven/usr/.env          # Add at least one LLM API key
 sudo systemctl restart briven   # Apply changes
 journalctl -u briven -f         # Watch logs
+python tools/tailscale.py --acl-status  # Verify ACL policy
 ```
 
 Open **http://\<your-tailscale-ip\>:8000** from any device on your tailnet.
 
-> **Python 3.12 is required.** Some dependencies (kokoro) are incompatible with Python 3.13+. The installer handles this automatically via the [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa).
+> **Supported distros:**
+> - **Ubuntu 24.04** — Python 3.12 via [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa)
+> - **Debian 13 (Trixie)** — System Python 3.13 (auto-pins `kokoro==0.7.16` if needed)
 
 ### Docker Install (optional)
 
@@ -111,10 +118,11 @@ Briven uses the **GOTCHA Framework** — a 6-layer architecture:
 - System prompt always loads `/atlas` guidelines before acting.
 - Keeps the agent disciplined: checks `goals/manifest.md`, uses existing tools, documents failures.
 
-### 4. Tailscale-first Networking
+### 4. Tailscale-first Networking + ACL Enforcement
 - No exposed public ports. Access via Tailscale mesh network.
 - Secure remote access from any device on your tailnet.
-- See `tools/tailscale.py` for integration helpers.
+- **ACL enforcement:** Only `tag:admin` devices can reach Briven on port 8000 — all others denied.
+- See `tools/tailscale.py` for integration helpers and ACL management (`--apply-acl`, `--acl-status`).
 
 ### 5. Memory System
 - SQLite + vector embeddings + BM25 hybrid search.
@@ -198,7 +206,8 @@ API_KEY_GOOGLE=AIzaSy-...      # Google Gemini (multimodal)
 API_KEY_DEEPSEEK=sk-...        # DeepSeek (cost-effective)
 
 # Tailscale (optional but recommended)
-TAILSCALE_AUTH_KEY=tskey-auth-...
+TAILSCALE_AUTHKEY=tskey-auth-...
+TAILSCALE_API_KEY=tskey-api-...     # ACL enforcement (optional)
 
 # Automated settings via env vars
 BRIVEN_SET_chat_model=openrouter/anthropic/claude-sonnet-4-6
