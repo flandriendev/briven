@@ -6,8 +6,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 #
 # Supported:
-#   Ubuntu 24.04  → Python 3.12 via deadsnakes PPA
-#   Debian 13     → System Python 3.13 (kokoro/TTS auto-disabled)
+#   Ubuntu 24.04  → Python 3.12 via deadsnakes PPA (full compatibility)
+#   Debian 13     → Python 3.13 (system) + sed fixes for incompatible deps
 # Security: Tailscale-only networking + ACL enforcement
 # Idempotent: Safe to re-run at any time
 # ============================================================
@@ -16,7 +16,7 @@ set -euo pipefail
 REPO="https://github.com/flandriendev/briven.git"
 BRIVEN_PORT="${BRIVEN_PORT:-8000}"
 
-# ── Colors (Briven red: RGB 221,63,42) ───────────────────────
+# ── Colors (Briven red: RGB 221,63,42 / #dd3f2a) ────────────
 BRED='\e[38;2;221;63;42m'
 RED='\e[31m'
 YEL='\e[33m'
@@ -68,7 +68,11 @@ info "Install dir: $INSTALL_DIR (user: $RUN_USER)"
 step "1/9" "System dependencies"
 
 sudo apt-get update -qq
-sudo apt-get install -y -qq git curl ca-certificates build-essential
+sudo apt-get install -y -qq \
+    git curl wget ca-certificates build-essential \
+    libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
+    libsqlite3-dev libncursesw5-dev libxml2-dev libxmlsec1-dev \
+    libffi-dev liblzma-dev jq
 ok "Base packages ready."
 
 # ══════════════════════════════════════════════════════════════
@@ -91,11 +95,18 @@ if [[ "$DISTRO" == "UBUNTU" ]]; then
     ok "Python 3.12 (Ubuntu / deadsnakes)"
 
 elif [[ "$DISTRO" == "DEBIAN" ]]; then
-    # Debian 13 (Trixie) → system Python 3.13
-    sudo apt-get install -y -qq python3 python3-venv python3-dev
-    PYTHON=python3
-    PYVER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    ok "Python $PYVER (Debian system)"
+    # Debian 13 → system Python 3.13
+    # Incompatible deps will be fixed in Step 4 via sed
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON=python3
+        PY_VER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        ok "Python $PY_VER (Debian system)"
+    else
+        sudo apt-get install -y -qq python3 python3-venv python3-dev
+        PYTHON=python3
+        PY_VER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        ok "Python $PY_VER installed"
+    fi
 fi
 
 "$PYTHON" --version || err "Python not found after install."
@@ -115,7 +126,7 @@ cd "$INSTALL_DIR"
 ok "Repository ready at $INSTALL_DIR"
 
 # ══════════════════════════════════════════════════════════════
-# Step 4 — Venv + dependencies (with kokoro fallback)
+# Step 4 — Venv + dependencies
 # ══════════════════════════════════════════════════════════════
 step "4/9" "Python environment"
 
@@ -138,27 +149,25 @@ source .venv/bin/activate
 
 pip install --upgrade pip setuptools wheel --quiet
 
+# ── Fix incompatible deps for Python >= 3.13 (Debian 13) ────
+PY_MINOR=$("$PYTHON" -c 'import sys; print(sys.version_info.minor)')
+if [[ "$PY_MINOR" -ge 13 ]]; then
+    info "Python 3.13+ detected — patching requirements for compatibility..."
+    # unstructured 0.16.23 pulls onnxruntime<=1.19.2 which has no 3.13 wheel
+    sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
+    # kokoro >= 0.9.2 (and misaki dep) are incompatible with Python 3.13
+    sed -i 's/^kokoro/#kokoro/' requirements.txt
+    ok "Patched: unstructured→0.20.8, kokoro disabled (incompatible with 3.13)"
+fi
+
 info "Installing dependencies..."
-PIP_LOG=$(mktemp)
-if pip install -r requirements.txt > "$PIP_LOG" 2>&1; then
+if pip install -r requirements.txt --quiet 2>&1; then
     ok "Dependencies installed."
 else
-    if grep -qi "kokoro" "$PIP_LOG"; then
-        warn "kokoro is incompatible with Python 3.13 — disabling TTS..."
-        sed -i 's/^kokoro/# kokoro/' requirements.txt
-        if pip install -r requirements.txt > "$PIP_LOG" 2>&1; then
-            ok "Dependencies installed (kokoro/TTS disabled on Python 3.13)."
-        else
-            cat "$PIP_LOG" >&2
-            err "pip install failed even with kokoro disabled. See output above."
-        fi
-    else
-        cat "$PIP_LOG" >&2
-        err "pip install failed. See output above."
-    fi
+    err "pip install failed. Check requirements.txt and Python version."
 fi
 [[ -f requirements2.txt ]] && pip install -r requirements2.txt --quiet
-rm -f "$PIP_LOG"
+ok "All dependencies ready."
 
 # Environment files
 for d in . usr; do
@@ -181,7 +190,7 @@ sudo systemctl start tailscaled || true
 ok "Tailscale ready."
 
 # ══════════════════════════════════════════════════════════════
-# Step 6 — Tailscale authentication
+# Step 6 — Tailscale authentication (with retry)
 # ══════════════════════════════════════════════════════════════
 step "6/9" "Tailscale authentication"
 
@@ -205,16 +214,26 @@ if echo "$TS_STATUS" | grep -qE "NeedsLogin|stopped|not logged in|failed"; then
     fi
 
     if [[ -n "${KEY:-}" ]]; then
-        if sudo tailscale up --authkey="$KEY" --accept-routes --accept-dns=false; then
+        TS_OK=false
+        for attempt in 1 2 3; do
+            if sudo tailscale up --authkey="$KEY" --accept-routes --accept-dns=false; then
+                TS_OK=true
+                break
+            fi
+            warn "Tailscale attempt $attempt failed — retrying in 3s..."
+            sleep 3
+        done
+        if $TS_OK; then
             ok "Tailscale connected."
         else
-            warn "Auth failed — retry: sudo tailscale up"
+            warn "Auth failed after 3 attempts — retry: sudo tailscale up"
         fi
     fi
 else
     ok "Tailscale already authenticated."
 fi
 
+# Validate Tailscale is actually connected
 TS_IP=$(tailscale ip --4 2>/dev/null | head -1 | awk '{print $1}' || echo "")
 if [[ -z "$TS_IP" ]]; then
     warn "No Tailscale IP detected. Service will bind to 127.0.0.1."

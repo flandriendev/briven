@@ -51,6 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh
 ```
 
 The script will prompt you for:
+
 1. A [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) to enable zero-trust networking (no exposed ports)
 2. A [Tailscale API access token](https://login.tailscale.com/admin/settings/keys) to enforce ACL policy (optional — restricts access to `tag:admin` → `tag:briven-server:8000`)
 
@@ -66,22 +67,39 @@ python tools/tailscale.py --acl-status  # Verify ACL policy
 Open **http://\<your-tailscale-ip\>:8000** from any device on your tailnet.
 
 > **Supported distros:**
-> - **Ubuntu 24.04** — Python 3.12 via [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa)
-> - **Debian 13 (Trixie)** — System Python 3.13 (kokoro/TTS auto-disabled; incompatible with 3.13)
+>
+> - **Ubuntu 24.04** — Python 3.12 via [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) (full compatibility)
+> - **Debian 13 (Trixie)** — Python 3.13 (system); installer auto-patches `unstructured→0.20.8` and disables `kokoro` (TTS) for 3.13 compatibility
 
 ### Docker Install (optional)
+
+> Docker is optional — it provides better isolation, but native install is still preferred for full modularity and direct access to all tools.
 
 ```bash
 git clone https://github.com/flandriendev/briven.git && cd briven
 cp usr/.env.example usr/.env && nano usr/.env   # Add your API keys
 
-# Start with Tailscale inside the container:
-TAILSCALE_AUTHKEY=tskey-auth-xxxxx docker compose up -d
+# Build and start (with Tailscale inside the container):
+TAILSCALE_AUTHKEY=tskey-auth-xxxxx docker compose up -d --build
 ```
 
-Without `TAILSCALE_AUTHKEY`, the container binds to `127.0.0.1:8000` (local access only).
+Without `TAILSCALE_AUTHKEY`, the container binds to `127.0.0.1:8000` (local access only — no public exposure).
+
+With `TAILSCALE_AUTHKEY`, the container auto-authenticates to your tailnet and binds to its Tailscale IP. Access **http://\<your-tailscale-ip\>:8000** from any device on your tailnet.
 
 > **Tailscale auth key:** [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) — create a reusable key.
+
+**Docker volumes** — your config, tools, and data persist across container restarts:
+
+| Volume | Container path | Purpose |
+|--------|---------------|---------|
+| `./usr/.env` | `/app/usr/.env` | API keys and settings |
+| `./atlas/` | `/app/atlas/` | /atlas operational handbook |
+| `./tools/` | `/app/tools/` | Custom tools (tailscale, telegram, etc.) |
+| `./skills/` | `/app/skills/` | Portable agent skills |
+| `./memory/` | `/app/memory/` | Persistent memory |
+| `./data/` | `/app/data/` | Application data |
+| `./logs/` | `/app/logs/` | Session logs |
 
 > **More guides:** [Mac Mini Setup](./docs/setup/mac-mini.md) | [VPS + Tailscale Hardening](./docs/setup/vps-tailscale-secure.md) (UFW, fail2ban, SSH lockdown)
 

@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 # ── System deps + Tailscale ──────────────────────────────────
 RUN apt-get update \
@@ -10,12 +10,9 @@ RUN apt-get update \
 WORKDIR /app
 
 # ── Python deps (cached layer — only rebuilds when requirements change) ──
-# Python 3.13: kokoro (TTS) is incompatible — auto-disable on failure
 COPY requirements.txt requirements2.txt* ./
 RUN pip install --no-cache-dir --upgrade pip \
-    && ( pip install --no-cache-dir -r requirements.txt \
-         || ( sed -i 's/^kokoro/# kokoro/' requirements.txt \
-              && pip install --no-cache-dir -r requirements.txt ) ) \
+    && pip install --no-cache-dir -r requirements.txt \
     && if [ -f requirements2.txt ]; then pip install --no-cache-dir -r requirements2.txt; fi
 
 # ── Application code ─────────────────────────────────────────
@@ -27,9 +24,6 @@ RUN mkdir -p /var/run/tailscale /var/lib/tailscale \
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-
-# ── ACL enforcement on startup (if TAILSCALE_API_KEY set) ────
-ENV TAILSCALE_API_KEY=""
 
 EXPOSE 8000
 

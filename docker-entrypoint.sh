@@ -21,18 +21,27 @@ if [[ -n "${TAILSCALE_AUTHKEY:-}" ]]; then
     done
 
     echo "[briven] Authenticating with Tailscale..."
-    if tailscale --socket=/var/run/tailscale/tailscaled.sock up \
-        --authkey="$TAILSCALE_AUTHKEY" \
-        --accept-routes \
-        --accept-dns=false; then
+    TS_OK=false
+    for attempt in 1 2 3; do
+        if tailscale --socket=/var/run/tailscale/tailscaled.sock up \
+            --authkey="$TAILSCALE_AUTHKEY" \
+            --accept-routes \
+            --accept-dns=false; then
+            TS_OK=true
+            break
+        fi
+        echo "[briven] Tailscale attempt $attempt failed — retrying in 3s..."
+        sleep 3
+    done
 
+    if $TS_OK; then
         TS_IP=$(tailscale --socket=/var/run/tailscale/tailscaled.sock ip -4 2>/dev/null || echo "")
         if [[ -n "$TS_IP" ]]; then
             BIND_HOST="$TS_IP"
             echo "[briven] Tailscale connected: $TS_IP"
         fi
     else
-        echo "[briven] WARNING: Tailscale auth failed — falling back to 0.0.0.0"
+        echo "[briven] WARNING: Tailscale auth failed after 3 attempts — falling back to 0.0.0.0"
     fi
 else
     echo "[briven] No TAILSCALE_AUTHKEY set — binding to 0.0.0.0"

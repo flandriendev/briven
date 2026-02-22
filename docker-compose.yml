@@ -28,6 +28,7 @@ services:
       - ./usr/.env:/app/usr/.env
       - ./atlas:/app/atlas
       - ./tools:/app/tools
+      - ./skills:/app/skills
       # Persistent data
       - ./memory:/app/memory
       - ./knowledge:/app/knowledge
