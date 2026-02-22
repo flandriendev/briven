@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # ============================================================
-# Briven — Zero-Trust VPS Installer
+# Briven — Guided Zero-Trust VPS Installer
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 #
 # Supported:
-#   Ubuntu 24.04  → Python 3.12 via deadsnakes PPA (full compatibility)
-#   Debian 13     → Python 3.13 (system) + sed fixes for incompatible deps
-# Security: Tailscale-only networking + ACL enforcement
-# Idempotent: Safe to re-run at any time
+#   Ubuntu 22.04 / 24.04
+#   Debian 12 / 13
+#
+# Features:
+#   - Guided setup: Tailscale auth + LLM API keys asked during install
+#   - Tailscale-only networking + ACL enforcement
+#   - Idempotent: safe to re-run at any time
+#   - System ready to use immediately after install completes
 # ============================================================
 set -euo pipefail
 
@@ -20,6 +24,7 @@ BRIVEN_PORT="${BRIVEN_PORT:-8000}"
 BRED='\e[38;2;221;63;42m'
 RED='\e[31m'
 YEL='\e[33m'
+GRN='\e[32m'
 BOLD='\e[1m'
 DIM='\e[2m'
 RST='\e[0m'
@@ -29,6 +34,30 @@ ok()    { printf "${BRED}  ✓${RST} %s\n" "$*"; }
 warn()  { printf "${YEL}[briven]${RST} %s\n" "$*"; }
 err()   { printf "${RED}[briven] ERROR:${RST} %s\n" "$*" >&2; exit 1; }
 step()  { printf "\n${BOLD}${BRED}[%s]${RST} ${BOLD}%s${RST}\n" "$1" "$2"; }
+
+# ── Interactive input (works with curl | bash via /dev/tty) ──
+ask() {
+    local prompt="$1" val=""
+    if [[ -t 0 ]]; then
+        read -rp "$prompt" val
+    elif [[ -e /dev/tty ]]; then
+        read -rp "$prompt" val < /dev/tty
+    fi
+    printf '%s' "$val"
+}
+
+# ── Write key to usr/.env (uncomment if commented, append if missing)
+set_env() {
+    local key="$1" val="$2" file="$INSTALL_DIR/usr/.env"
+    [[ -z "$val" ]] && return
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+    elif grep -q "^# *${key}=" "$file" 2>/dev/null; then
+        sed -i "s|^# *${key}=.*|${key}=${val}|" "$file"
+    else
+        printf '%s=%s\n' "$key" "$val" >> "$file"
+    fi
+}
 
 # ── Banner ────────────────────────────────────────────────────
 printf "\n${BRED}${BOLD}"
@@ -47,7 +76,7 @@ if grep -qi "ubuntu" /etc/os-release 2>/dev/null; then
 elif grep -qi "debian" /etc/os-release 2>/dev/null; then
     DISTRO="DEBIAN"
 else
-    err "Unsupported distro. Requires Ubuntu 24.04 or Debian 13 (Trixie)."
+    err "Unsupported distro. Requires Ubuntu 22.04/24.04 or Debian 12/13."
 fi
 info "Detected: $DISTRO"
 
@@ -65,56 +94,21 @@ info "Install dir: $INSTALL_DIR (user: $RUN_USER)"
 # ══════════════════════════════════════════════════════════════
 # Step 1 — System dependencies
 # ══════════════════════════════════════════════════════════════
-step "1/9" "System dependencies"
+step "1/10" "System dependencies"
 
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
     git curl wget ca-certificates build-essential \
+    python3 python3-venv python3-dev python3-pip \
     libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
     libsqlite3-dev libncursesw5-dev libxml2-dev libxmlsec1-dev \
     libffi-dev liblzma-dev jq
 ok "Base packages ready."
 
 # ══════════════════════════════════════════════════════════════
-# Step 2 — Python
+# Step 2 — Clone / update repository
 # ══════════════════════════════════════════════════════════════
-step "2/9" "Python"
-
-PYTHON=""
-
-if [[ "$DISTRO" == "UBUNTU" ]]; then
-    # Ubuntu 24.04 → Python 3.12 via deadsnakes PPA
-    if ! apt-cache show python3.12 >/dev/null 2>&1; then
-        info "Adding deadsnakes PPA for Python 3.12..."
-        sudo apt-get install -y -qq software-properties-common
-        sudo add-apt-repository -y ppa:deadsnakes/ppa
-        sudo apt-get update -qq
-    fi
-    sudo apt-get install -y -qq python3.12 python3.12-venv python3.12-dev
-    PYTHON=python3.12
-    ok "Python 3.12 (Ubuntu / deadsnakes)"
-
-elif [[ "$DISTRO" == "DEBIAN" ]]; then
-    # Debian 13 → system Python 3.13
-    # Incompatible deps will be fixed in Step 4 via sed
-    if command -v python3 >/dev/null 2>&1; then
-        PYTHON=python3
-        PY_VER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        ok "Python $PY_VER (Debian system)"
-    else
-        sudo apt-get install -y -qq python3 python3-venv python3-dev
-        PYTHON=python3
-        PY_VER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        ok "Python $PY_VER installed"
-    fi
-fi
-
-"$PYTHON" --version || err "Python not found after install."
-
-# ══════════════════════════════════════════════════════════════
-# Step 3 — Clone / update repository
-# ══════════════════════════════════════════════════════════════
-step "3/9" "Clone Briven"
+step "2/10" "Clone Briven"
 
 if [[ -d "$INSTALL_DIR/.git" ]]; then
     info "Already cloned — pulling latest..."
@@ -126,16 +120,19 @@ cd "$INSTALL_DIR"
 ok "Repository ready at $INSTALL_DIR"
 
 # ══════════════════════════════════════════════════════════════
-# Step 4 — Venv + dependencies
+# Step 3 — Python venv + dependencies
 # ══════════════════════════════════════════════════════════════
-step "4/9" "Python environment"
+step "3/10" "Python environment"
+
+PYTHON=python3
+PY_VER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+info "Python $PY_VER"
 
 # Recreate venv if Python version changed
 if [[ -d .venv ]]; then
     VENV_PY=$(.venv/bin/python --version 2>/dev/null | awk '{print $2}' | cut -d. -f1,2 || echo "")
-    WANT_PY=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    if [[ "$VENV_PY" != "$WANT_PY" ]]; then
-        warn "Existing venv is Python $VENV_PY, need $WANT_PY — recreating..."
+    if [[ "$VENV_PY" != "$PY_VER" ]]; then
+        warn "Existing venv is Python $VENV_PY, need $PY_VER — recreating..."
         rm -rf .venv
     fi
 fi
@@ -149,92 +146,100 @@ source .venv/bin/activate
 
 pip install --upgrade pip setuptools wheel --quiet
 
-# ── Fix incompatible deps for Python >= 3.13 (Debian 13) ────
+# ── Fix incompatible deps for Python >= 3.13 ─────────────────
 PY_MINOR=$("$PYTHON" -c 'import sys; print(sys.version_info.minor)')
 if [[ "$PY_MINOR" -ge 13 ]]; then
     info "Python 3.13+ detected — patching requirements for compatibility..."
-    # unstructured 0.16.23 pulls onnxruntime<=1.19.2 which has no 3.13 wheel
     sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
-    # kokoro >= 0.9.2 (and misaki dep) are incompatible with Python 3.13
     sed -i 's/^kokoro/#kokoro/' requirements.txt
     ok "Patched: unstructured→0.20.8, kokoro disabled (incompatible with 3.13)"
 fi
 
-info "Installing dependencies..."
+info "Installing dependencies (this may take a few minutes)..."
 if pip install -r requirements.txt --quiet 2>&1; then
     ok "Dependencies installed."
 else
-    err "pip install failed. Check requirements.txt and Python version."
+    # Fallback: try disabling kokoro + upgrading unstructured
+    warn "pip install failed — retrying with compatibility patches..."
+    sed -i 's/^kokoro/#kokoro/' requirements.txt
+    sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
+    if pip install -r requirements.txt --quiet 2>&1; then
+        ok "Dependencies installed (kokoro/TTS disabled for compatibility)."
+    else
+        err "pip install failed. Check requirements.txt and Python version."
+    fi
 fi
 [[ -f requirements2.txt ]] && pip install -r requirements2.txt --quiet
 ok "All dependencies ready."
 
-# Environment files
-for d in . usr; do
-    if [[ -f "$d/.env.example" && ! -f "$d/.env" ]]; then
-        cp "$d/.env.example" "$d/.env"
-        ok "Created $d/.env from template."
-    fi
-done
-
 # ══════════════════════════════════════════════════════════════
-# Step 5 — Tailscale
+# Step 4 — Tailscale
 # ══════════════════════════════════════════════════════════════
-step "5/9" "Tailscale"
+step "4/10" "Tailscale"
 
 if ! command -v tailscale >/dev/null 2>&1; then
     info "Installing Tailscale..."
     curl -fsSL https://tailscale.com/install.sh | sh
 fi
-sudo systemctl start tailscaled || true
+sudo systemctl enable --now tailscaled 2>/dev/null || true
 ok "Tailscale ready."
 
 # ══════════════════════════════════════════════════════════════
-# Step 6 — Tailscale authentication (with retry)
+# Step 5 — Tailscale authentication (guided, with retry)
 # ══════════════════════════════════════════════════════════════
-step "6/9" "Tailscale authentication"
+step "5/10" "Tailscale authentication"
 
-TS_STATUS=$(tailscale status 2>&1 || true)
+TS_STATUS=$(tailscale status --json 2>/dev/null || echo '{}')
+TS_BACKEND=$(printf '%s' "$TS_STATUS" | jq -r '.BackendState // ""' 2>/dev/null || echo "")
 
-if echo "$TS_STATUS" | grep -qE "NeedsLogin|stopped|not logged in|failed"; then
+if [[ "$TS_BACKEND" == "Running" ]]; then
+    ok "Tailscale already authenticated."
+else
     printf '\n'
-    printf '\e[38;2;221;63;42m%s\e[0m\n' \
-        "  Go to https://login.tailscale.com/admin/settings/keys"
-    printf '\e[38;2;221;63;42m%s\e[0m\n' \
-        "  → create new key (reusable/ephemeral) → paste here:"
+    printf '  \e[38;2;221;63;42m%s\e[0m\n' "Tailscale connects your server to a private, zero-trust mesh network."
+    printf '  \e[38;2;221;63;42m%s\e[0m\n' "No ports are exposed to the public internet."
+    printf '\n'
+    printf '  \e[38;2;221;63;42m%s\e[0m\n' "1. Go to: https://login.tailscale.com/admin/settings/keys"
+    printf '  \e[38;2;221;63;42m%s\e[0m\n' "2. Create a new auth key (reusable recommended)"
+    printf '  \e[38;2;221;63;42m%s\e[0m\n' "3. Paste it below"
     printf '\n'
 
-    KEY=""
-    if [[ -t 0 ]]; then
-        read -rp "  Auth key: " KEY
-    elif [[ -e /dev/tty ]]; then
-        read -rp "  Auth key: " KEY < /dev/tty
-    else
-        warn "Non-interactive — run later: sudo tailscale up"
-    fi
+    TS_OK=false
+    for attempt in 1 2 3; do
+        KEY=$(ask "  Auth key (tskey-auth-...): ")
 
-    if [[ -n "${KEY:-}" ]]; then
-        TS_OK=false
-        for attempt in 1 2 3; do
-            if sudo tailscale up --authkey="$KEY" --accept-routes --accept-dns=false; then
+        if [[ -z "$KEY" ]]; then
+            warn "Skipped — run later: sudo tailscale up"
+            break
+        fi
+
+        if [[ "$KEY" != tskey-* ]]; then
+            warn "Key should start with 'tskey-' — try again."
+            continue
+        fi
+
+        if sudo tailscale up --authkey="$KEY" --accept-routes --accept-dns=false 2>/dev/null; then
+            # Verify connection
+            sleep 2
+            VERIFY=$(tailscale status --json 2>/dev/null || echo '{}')
+            VERIFY_STATE=$(printf '%s' "$VERIFY" | jq -r '.BackendState // ""' 2>/dev/null || echo "")
+            if [[ "$VERIFY_STATE" == "Running" ]]; then
                 TS_OK=true
+                ok "Tailscale connected and verified."
                 break
             fi
-            warn "Tailscale attempt $attempt failed — retrying in 3s..."
-            sleep 3
-        done
-        if $TS_OK; then
-            ok "Tailscale connected."
-        else
-            warn "Auth failed after 3 attempts — retry: sudo tailscale up"
         fi
-    fi
-else
-    ok "Tailscale already authenticated."
+
+        if [[ "$attempt" -lt 3 ]]; then
+            warn "Attempt $attempt failed — try again (${attempt}/3)..."
+        else
+            warn "Auth failed after 3 attempts — run later: sudo tailscale up"
+        fi
+    done
 fi
 
-# Validate Tailscale is actually connected
-TS_IP=$(tailscale ip --4 2>/dev/null | head -1 | awk '{print $1}' || echo "")
+# Get Tailscale IP
+TS_IP=$(tailscale ip --4 2>/dev/null | head -1 | tr -d ' ' || echo "")
 if [[ -z "$TS_IP" ]]; then
     warn "No Tailscale IP detected. Service will bind to 127.0.0.1."
     TS_IP="127.0.0.1"
@@ -243,11 +248,67 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════
-# Step 7 — Tailscale ACL (zero-trust policy)
+# Step 6 — Environment file
 # ══════════════════════════════════════════════════════════════
-step "7/9" "Tailscale ACL"
+step "6/10" "Environment"
 
-# Read API key from .env or prompt
+for d in . usr; do
+    if [[ -f "$d/.env.example" && ! -f "$d/.env" ]]; then
+        cp "$d/.env.example" "$d/.env"
+        ok "Created $d/.env from template."
+    fi
+done
+
+# ══════════════════════════════════════════════════════════════
+# Step 7 — LLM API keys (guided prompts)
+# ══════════════════════════════════════════════════════════════
+step "7/10" "LLM API keys"
+
+printf '\n'
+printf '  \e[38;2;221;63;42m%s\e[0m\n' "Briven needs at least one LLM API key to work."
+printf '  \e[38;2;221;63;42m%s\e[0m\n' "Enter your keys below — press Enter to skip any provider."
+printf '  \e[38;2;221;63;42m%s\e[0m\n' "You can always add or change keys later in usr/.env"
+printf '\n'
+
+KEY_COUNT=0
+
+# OpenRouter (recommended — one key, 200+ models)
+val=$(ask "  OpenRouter (sk-or-...): ")
+if [[ -n "$val" ]]; then set_env "API_KEY_OPENROUTER" "$val"; ((KEY_COUNT++)); fi
+
+# Anthropic (Claude)
+val=$(ask "  Anthropic  (sk-ant-...): ")
+if [[ -n "$val" ]]; then set_env "API_KEY_ANTHROPIC" "$val"; ((KEY_COUNT++)); fi
+
+# xAI / Grok
+val=$(ask "  xAI / Grok (xai-...): ")
+if [[ -n "$val" ]]; then set_env "API_KEY_XAI" "$val"; ((KEY_COUNT++)); fi
+
+# OpenAI
+val=$(ask "  OpenAI     (sk-...): ")
+if [[ -n "$val" ]]; then set_env "API_KEY_OPENAI" "$val"; ((KEY_COUNT++)); fi
+
+# DeepSeek
+val=$(ask "  DeepSeek   (sk-...): ")
+if [[ -n "$val" ]]; then set_env "API_KEY_DEEPSEEK" "$val"; ((KEY_COUNT++)); fi
+
+# Google Gemini
+val=$(ask "  Google     (AIzaSy-...): ")
+if [[ -n "$val" ]]; then set_env "API_KEY_GOOGLE" "$val"; ((KEY_COUNT++)); fi
+
+printf '\n'
+if [[ "$KEY_COUNT" -gt 0 ]]; then
+    ok "$KEY_COUNT API key(s) saved to usr/.env"
+else
+    warn "No API keys entered — add at least one later: nano $INSTALL_DIR/usr/.env"
+fi
+
+# ══════════════════════════════════════════════════════════════
+# Step 8 — Tailscale ACL (zero-trust policy)
+# ══════════════════════════════════════════════════════════════
+step "8/10" "Tailscale ACL"
+
+# Check if API key already in .env
 TS_API_KEY=""
 for envfile in "$INSTALL_DIR/usr/.env" "$INSTALL_DIR/.env"; do
     if [[ -f "$envfile" ]]; then
@@ -261,60 +322,40 @@ done
 
 if [[ -z "$TS_API_KEY" ]]; then
     printf '\n'
-    printf '\e[38;2;221;63;42m%s\e[0m\n' \
-        "  Tailscale ACL enforcement requires an API access token."
-    printf '\e[38;2;221;63;42m%s\e[0m\n' \
-        "  Go to https://login.tailscale.com/admin/settings/keys → API access tokens"
-    printf '\e[38;2;221;63;42m%s\e[0m\n' \
-        "  → Generate access token → paste here (or press Enter to skip):"
+    printf '  \e[38;2;221;63;42m%s\e[0m\n' "Optional: Tailscale ACL restricts access to tag:admin devices only."
+    printf '  \e[38;2;221;63;42m%s\e[0m\n' "Go to: https://login.tailscale.com/admin/settings/keys → API access tokens"
     printf '\n'
 
-    if [[ -t 0 ]]; then
-        read -rp "  API key: " TS_API_KEY
-    elif [[ -e /dev/tty ]]; then
-        read -rp "  API key: " TS_API_KEY < /dev/tty
-    fi
+    TS_API_KEY=$(ask "  API key (tskey-api-..., or Enter to skip): ")
 fi
 
 if [[ -n "${TS_API_KEY:-}" ]]; then
-    # Persist to usr/.env
-    ENV_FILE="$INSTALL_DIR/usr/.env"
-    if [[ -f "$ENV_FILE" ]]; then
-        if grep -q "^TAILSCALE_API_KEY=" "$ENV_FILE" 2>/dev/null; then
-            sed -i "s|^TAILSCALE_API_KEY=.*|TAILSCALE_API_KEY=$TS_API_KEY|" "$ENV_FILE"
-        else
-            printf '\nTAILSCALE_API_KEY=%s\n' "$TS_API_KEY" >> "$ENV_FILE"
-        fi
-        ok "TAILSCALE_API_KEY saved to usr/.env"
-    fi
+    set_env "TAILSCALE_API_KEY" "$TS_API_KEY"
+    ok "TAILSCALE_API_KEY saved to usr/.env"
 
-    # Apply ACL via tools/tailscale.py
     info "Applying Briven zero-trust ACL policy..."
-    ACL_RESULT=""
     ACL_OK=false
     for attempt in 1 2; do
-        ACL_RESULT=$("$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/tools/tailscale.py" --apply-acl 2>&1) && ACL_OK=true && break
-        if [[ "$attempt" -eq 1 ]]; then
-            warn "ACL apply attempt $attempt failed — retrying..."
-            sleep 2
+        if "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/tools/tailscale.py" --apply-acl 2>&1; then
+            ACL_OK=true
+            break
         fi
+        [[ "$attempt" -eq 1 ]] && sleep 2
     done
 
     if $ACL_OK; then
         ok "Tailscale ACL applied — only tag:admin → tag:briven-server:$BRIVEN_PORT allowed."
     else
-        warn "ACL apply failed after 2 attempts: $ACL_RESULT"
-        warn "Apply manually later: python tools/tailscale.py --apply-acl"
+        warn "ACL apply failed — run manually: python tools/tailscale.py --apply-acl"
     fi
 else
-    warn "No Tailscale API key — skipping ACL enforcement."
-    warn "Add TAILSCALE_API_KEY to usr/.env and run: python tools/tailscale.py --apply-acl"
+    warn "Skipped ACL — add TAILSCALE_API_KEY later and run: python tools/tailscale.py --apply-acl"
 fi
 
 # ══════════════════════════════════════════════════════════════
-# Step 8 — Systemd service
+# Step 9 — Systemd service
 # ══════════════════════════════════════════════════════════════
-step "8/9" "Systemd service"
+step "9/10" "Systemd service"
 
 sudo tee /etc/systemd/system/briven.service > /dev/null << UNIT
 [Unit]
@@ -346,9 +387,9 @@ UNIT
 ok "Created /etc/systemd/system/briven.service"
 
 # ══════════════════════════════════════════════════════════════
-# Step 9 — Enable + start
+# Step 10 — Enable + start
 # ══════════════════════════════════════════════════════════════
-step "9/9" "Start Briven"
+step "10/10" "Start Briven"
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now briven
@@ -374,11 +415,11 @@ printf "${RST}\n"
 printf "  ${BRED}${BOLD}Tailscale IP:${RST}  %s\n" "$TS_IP"
 printf "  ${BRED}${BOLD}Web UI:${RST}       http://%s:%s\n" "$TS_IP" "$BRIVEN_PORT"
 printf "\n"
-printf "  ${BOLD}Next steps:${RST}\n"
-printf "  1. Edit API keys:   nano %s/usr/.env\n" "$INSTALL_DIR"
-printf "  2. Restart:          sudo systemctl restart briven\n"
-printf "  3. Logs:             journalctl -u briven -f\n"
-printf "  4. ACL status:       python tools/tailscale.py --acl-status\n"
+printf "  ${BOLD}Quick reference:${RST}\n"
+printf "    Edit API keys:   nano %s/usr/.env\n" "$INSTALL_DIR"
+printf "    Restart:          sudo systemctl restart briven\n"
+printf "    Logs:             journalctl -u briven -f\n"
+printf "    ACL status:       python tools/tailscale.py --acl-status\n"
 printf "\n"
 printf "  ${DIM}Tailscale keys: https://login.tailscale.com/admin/settings/keys${RST}\n"
 printf "\n"
