@@ -278,29 +278,29 @@ printf '\n'
 
 KEY_COUNT=0
 
-# OpenRouter (recommended — one key, 200+ models)
-val=$(ask "  OpenRouter (sk-or-...): ")
-if [[ -n "$val" ]]; then set_env "API_KEY_OPENROUTER" "$val"; ((KEY_COUNT++)); fi
+# Provider list: ENV_VAR|Display Name|Key hint
+PROVIDERS=(
+    "API_KEY_OPENROUTER|OpenRouter|sk-or-..."
+    "API_KEY_ANTHROPIC|Anthropic (Claude)|sk-ant-..."
+    "API_KEY_XAI|xAI / Grok|xai-..."
+    "API_KEY_OPENAI|OpenAI|sk-..."
+    "API_KEY_DEEPSEEK|DeepSeek|sk-..."
+    "API_KEY_GOOGLE|Google Gemini|AIzaSy-..."
+    "API_KEY_GROQ|Groq|gsk_..."
+    "API_KEY_MISTRAL|Mistral AI|..."
+    "API_KEY_PERPLEXITY|Perplexity AI|pplx-..."
+    "API_KEY_COHERE|Cohere|..."
+    "API_KEY_HUGGINGFACE|HuggingFace|hf_..."
+)
 
-# Anthropic (Claude)
-val=$(ask "  Anthropic  (sk-ant-...): ")
-if [[ -n "$val" ]]; then set_env "API_KEY_ANTHROPIC" "$val"; ((KEY_COUNT++)); fi
-
-# xAI / Grok
-val=$(ask "  xAI / Grok (xai-...): ")
-if [[ -n "$val" ]]; then set_env "API_KEY_XAI" "$val"; ((KEY_COUNT++)); fi
-
-# OpenAI
-val=$(ask "  OpenAI     (sk-...): ")
-if [[ -n "$val" ]]; then set_env "API_KEY_OPENAI" "$val"; ((KEY_COUNT++)); fi
-
-# DeepSeek
-val=$(ask "  DeepSeek   (sk-...): ")
-if [[ -n "$val" ]]; then set_env "API_KEY_DEEPSEEK" "$val"; ((KEY_COUNT++)); fi
-
-# Google Gemini
-val=$(ask "  Google     (AIzaSy-...): ")
-if [[ -n "$val" ]]; then set_env "API_KEY_GOOGLE" "$val"; ((KEY_COUNT++)); fi
+for entry in "${PROVIDERS[@]}"; do
+    IFS='|' read -r env_var name hint <<< "$entry"
+    val=$(ask "  $name ($hint): ")
+    if [[ -n "$val" ]]; then
+        set_env "$env_var" "$val"
+        KEY_COUNT=$((KEY_COUNT + 1))
+    fi
+done
 
 printf '\n'
 if [[ "$KEY_COUNT" -gt 0 ]]; then

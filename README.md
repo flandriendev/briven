@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh
 The installer handles system deps, Python, Tailscale, and a systemd service — and **asks for your API keys during setup** so Briven is ready to use immediately:
 
 1. **[Tailscale auth key](https://login.tailscale.com/admin/settings/keys)** — zero-trust networking (no exposed ports)
-2. **LLM API keys** — OpenRouter, Anthropic, xAI/Grok, OpenAI, DeepSeek, Google (enter any you have, skip the rest)
+2. **LLM API keys** — OpenRouter, Anthropic, xAI/Grok, OpenAI, DeepSeek, Google, Groq, Mistral, Perplexity, Cohere, HuggingFace (enter any you have, skip the rest)
 3. **[Tailscale API token](https://login.tailscale.com/admin/settings/keys)** — optional ACL enforcement (`tag:admin` → `tag:briven-server:8000`)
 
 After install, open **http://\<your-tailscale-ip\>:8000** from any device on your tailnet.
@@ -66,7 +66,7 @@ sudo systemctl restart briven   # Apply changes
 journalctl -u briven -f         # Watch logs
 ```
 
-> **Supported distros:** Ubuntu 22.04 / 24.04, Debian 12 / 13. On Python 3.13+ the installer auto-patches `unstructured→0.20.8`, unpins `langchain-unstructured`, and disables `kokoro` (TTS) for compatibility.
+> **Supported distros:** Ubuntu 22.04 / 24.04, Debian 12 / 13. On Python 3.13+ the installer auto-patches `unstructured→0.20.8`, loosens all strict version pins, and disables `kokoro` (TTS) for compatibility.
 
 ### Docker Install (optional)
 
