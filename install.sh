@@ -150,11 +150,14 @@ pip install --upgrade pip setuptools wheel --quiet
 PY_MINOR=$("$PYTHON" -c 'import sys; print(sys.version_info.minor)')
 if [[ "$PY_MINOR" -ge 13 ]]; then
     info "Python 3.13+ detected — patching requirements for compatibility..."
-    sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
-    sed -i 's/^langchain-unstructured==0.1.6/langchain-unstructured/' requirements.txt
-    sed -i 's/^markdown==3.7/markdown/' requirements.txt
+    # Disable kokoro (no 3.13 wheel)
     sed -i 's/^kokoro/#kokoro/' requirements.txt
-    ok "Patched: unstructured→0.20.8, langchain-unstructured+markdown unpinned, kokoro disabled"
+    # Upgrade unstructured (0.16.23 pulls onnxruntime<=1.19.2 which has no 3.13 wheel)
+    sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
+    # Loosen all remaining strict pins (==) to minimums (>=) so pip can resolve
+    # compatible versions across the new dependency tree
+    sed -i '/^[^#]/s/==/>=/' requirements.txt
+    ok "Patched: kokoro disabled, unstructured→0.20.8, all pins loosened for 3.13"
 fi
 
 info "Installing dependencies (this may take a few minutes)..."
@@ -165,8 +168,7 @@ else
     warn "pip install failed — retrying with compatibility patches..."
     sed -i 's/^kokoro/#kokoro/' requirements.txt
     sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
-    sed -i 's/^langchain-unstructured==0.1.6/langchain-unstructured/' requirements.txt
-    sed -i 's/^markdown==3.7/markdown/' requirements.txt
+    sed -i '/^[^#]/s/==/>=/' requirements.txt
     if pip install -r requirements.txt --quiet 2>&1; then
         ok "Dependencies installed (kokoro/TTS disabled for compatibility)."
     else
