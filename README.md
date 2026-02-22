@@ -66,7 +66,7 @@ sudo systemctl restart briven   # Apply changes
 journalctl -u briven -f         # Watch logs
 ```
 
-> **Supported distros:** Ubuntu 22.04 / 24.04, Debian 12 / 13. On Python 3.13+ the installer auto-patches `unstructured→0.20.8` and disables `kokoro` (TTS) for compatibility.
+> **Supported distros:** Ubuntu 22.04 / 24.04, Debian 12 / 13. On Python 3.13+ the installer auto-patches `unstructured→0.20.8`, unpins `langchain-unstructured`, and disables `kokoro` (TTS) for compatibility.
 
 ### Docker Install (optional)
 
