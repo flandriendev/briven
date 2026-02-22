@@ -522,8 +522,8 @@ if [[ -n "$CH_SELECTION" ]]; then
                         warn "Could not verify bot token — check it later in usr/.env"
                     fi
 
-                    # Generate pairing code
-                    PAIR_CODE="BRV-$(LC_ALL=C tr -dc 'A-Z0-9' < /dev/urandom 2>/dev/null | head -c 6)"
+                    # Generate pairing code (openssl avoids SIGPIPE from tr|head + pipefail)
+                    PAIR_CODE="BRV-$(openssl rand -hex 3 2>/dev/null | tr '[:lower:]' '[:upper:]' || printf '%06d' $((RANDOM % 1000000)))"
 
                     # Clear old updates so we only see new ones
                     curl -sf "https://api.telegram.org/bot${TG_TOKEN}/getUpdates?offset=-1" > /dev/null 2>&1 || true
