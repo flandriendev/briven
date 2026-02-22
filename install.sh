@@ -157,6 +157,8 @@ if [[ "$PY_MINOR" -ge 13 ]]; then
     # Loosen all remaining strict pins (==) to minimums (>=) so pip can resolve
     # compatible versions across the new dependency tree
     sed -i '/^[^#]/s/==/>=/' requirements.txt
+    # Ensure openai is new enough for loosened browser-use (0.11+ needs openai>=2.7.2)
+    printf 'openai>=2.7.2\n' >> requirements.txt
     ok "Patched: kokoro disabled, unstructured→0.20.8, all pins loosened for 3.13"
 fi
 
@@ -272,7 +274,6 @@ step "7/10" "LLM API keys"
 
 printf '\n'
 printf '  \e[38;2;221;63;42m%s\e[0m\n' "Briven needs at least one LLM API key to work."
-printf '  \e[38;2;221;63;42m%s\e[0m\n' "Enter your keys below — press Enter to skip any provider."
 printf '  \e[38;2;221;63;42m%s\e[0m\n' "You can always add or change keys later in usr/.env"
 printf '\n'
 
@@ -293,14 +294,34 @@ PROVIDERS=(
     "API_KEY_HUGGINGFACE|HuggingFace|hf_..."
 )
 
-for entry in "${PROVIDERS[@]}"; do
-    IFS='|' read -r env_var name hint <<< "$entry"
-    val=$(ask "  $name ($hint): ")
-    if [[ -n "$val" ]]; then
-        set_env "$env_var" "$val"
-        KEY_COUNT=$((KEY_COUNT + 1))
-    fi
+# Display numbered provider list
+printf '  \e[1m%-4s %-22s %s\e[0m\n' "#" "Provider" "Key prefix"
+printf '  \e[2m%s\e[0m\n' "──────────────────────────────────────"
+for i in "${!PROVIDERS[@]}"; do
+    IFS='|' read -r _env _name _hint <<< "${PROVIDERS[$i]}"
+    printf '  %-4s %-22s \e[2m%s\e[0m\n' "$((i+1))." "$_name" "$_hint"
 done
+printf '\n'
+
+SELECTION=$(ask "  Which providers? (e.g. 1,3,5 — Enter to skip): ")
+
+if [[ -n "$SELECTION" ]]; then
+    IFS=',' read -ra SELECTED <<< "$SELECTION"
+    printf '\n'
+    for num in "${SELECTED[@]}"; do
+        num=$(printf '%s' "$num" | tr -d ' ')
+        idx=$((num - 1))
+        if [[ "$idx" -ge 0 && "$idx" -lt "${#PROVIDERS[@]}" ]]; then
+            IFS='|' read -r env_var name hint <<< "${PROVIDERS[$idx]}"
+            val=$(ask "  [$num] $name API key ($hint): ")
+            if [[ -n "$val" ]]; then
+                set_env "$env_var" "$val"
+                KEY_COUNT=$((KEY_COUNT + 1))
+                ok "$name saved"
+            fi
+        fi
+    done
+fi
 
 printf '\n'
 if [[ "$KEY_COUNT" -gt 0 ]]; then
