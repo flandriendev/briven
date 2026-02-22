@@ -7,7 +7,7 @@
 #
 # Supported:
 #   Ubuntu 24.04  → Python 3.12 via deadsnakes PPA
-#   Debian 13     → System Python 3.13 + auto kokoro fallback
+#   Debian 13     → System Python 3.13 (kokoro/TTS auto-disabled)
 # Security: Tailscale-only networking + ACL enforcement
 # Idempotent: Safe to re-run at any time
 # ============================================================
@@ -144,13 +144,13 @@ if pip install -r requirements.txt > "$PIP_LOG" 2>&1; then
     ok "Dependencies installed."
 else
     if grep -qi "kokoro" "$PIP_LOG"; then
-        warn "kokoro failed on Python 3.13 — pinning kokoro==0.7.4..."
-        sed -i 's/kokoro[^#]*$/kokoro==0.7.4/' requirements.txt
+        warn "kokoro is incompatible with Python 3.13 — disabling TTS..."
+        sed -i 's/^kokoro/# kokoro/' requirements.txt
         if pip install -r requirements.txt > "$PIP_LOG" 2>&1; then
-            ok "Dependencies installed (kokoro pinned to 0.7.4)."
+            ok "Dependencies installed (kokoro/TTS disabled on Python 3.13)."
         else
             cat "$PIP_LOG" >&2
-            err "pip install failed even with kokoro pinned. See output above."
+            err "pip install failed even with kokoro disabled. See output above."
         fi
     else
         cat "$PIP_LOG" >&2

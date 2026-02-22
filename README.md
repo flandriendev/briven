@@ -67,7 +67,7 @@ Open **http://\<your-tailscale-ip\>:8000** from any device on your tailnet.
 
 > **Supported distros:**
 > - **Ubuntu 24.04** — Python 3.12 via [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa)
-> - **Debian 13 (Trixie)** — System Python 3.13 (auto-pins `kokoro==0.7.4` if needed)
+> - **Debian 13 (Trixie)** — System Python 3.13 (kokoro/TTS auto-disabled; incompatible with 3.13)
 
 ### Docker Install (optional)
 

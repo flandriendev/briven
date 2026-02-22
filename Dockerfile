@@ -10,11 +10,11 @@ RUN apt-get update \
 WORKDIR /app
 
 # ── Python deps (cached layer — only rebuilds when requirements change) ──
-# Python 3.13: kokoro>=0.9 may fail — auto-pin kokoro==0.7.4 on failure
+# Python 3.13: kokoro (TTS) is incompatible — auto-disable on failure
 COPY requirements.txt requirements2.txt* ./
 RUN pip install --no-cache-dir --upgrade pip \
     && ( pip install --no-cache-dir -r requirements.txt \
-         || ( sed -i 's/kokoro[^#]*$/kokoro==0.7.4/' requirements.txt \
+         || ( sed -i 's/^kokoro/# kokoro/' requirements.txt \
               && pip install --no-cache-dir -r requirements.txt ) ) \
     && if [ -f requirements2.txt ]; then pip install --no-cache-dir -r requirements2.txt; fi
 
