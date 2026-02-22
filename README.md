@@ -42,25 +42,40 @@
 
 ## ⚡ Quick Start
 
+### Native Install (recommended)
+
+One command on a fresh Ubuntu/Debian VPS — installs Python, Tailscale, and creates a systemd service:
+
 ```bash
-# One-liner install (Mac Mini or VPS):
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
-Or manually:
+The script will prompt you for a [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) to enable zero-trust networking (no exposed ports). Then:
 
 ```bash
-git clone https://github.com/flandriendev/briven.git
-cd briven
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # then fill in your API keys
-uvicorn run_ui:app --host 0.0.0.0 --port 8000
-# Visit http://localhost:8000
+nano ~/briven/usr/.env          # Add at least one LLM API key
+sudo systemctl restart briven   # Apply changes
+journalctl -u briven -f         # Watch logs
 ```
 
-> **Tailscale users:** After setup, bind to your Tailscale IP (`--host 100.x.x.x`) for zero-trust access with no exposed ports.
-> See [Mac Mini Setup](./docs/setup/mac-mini.md) for the full Tailscale-native setup.
+Open **http://\<your-tailscale-ip\>:8000** from any device on your tailnet.
+
+### Docker Install (optional)
+
+```bash
+git clone https://github.com/flandriendev/briven.git && cd briven
+cp usr/.env.example usr/.env    # Add your API keys
+nano usr/.env
+
+# Start with Tailscale inside the container:
+TAILSCALE_AUTHKEY=tskey-auth-xxxxx docker compose up -d
+```
+
+Without `TAILSCALE_AUTHKEY`, the container binds to `127.0.0.1:8000` (local access only).
+
+> **Tailscale auth key:** [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) — create a reusable key.
+
+> **More guides:** [Mac Mini Setup](./docs/setup/mac-mini.md) | [VPS + Tailscale Hardening](./docs/setup/vps-tailscale-secure.md) (UFW, fail2ban, SSH lockdown)
 
 ---
 

@@ -1,0 +1,38 @@
+services:
+  briven:
+    build: .
+    container_name: briven
+    restart: always
+
+    # Required for Tailscale inside the container
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    environment:
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+      - BRIVEN_PORT=${BRIVEN_PORT:-8000}
+
+    # Localhost-only — no public exposure.
+    # With Tailscale inside the container, access via Tailscale IP directly.
+    # This mapping is a fallback for local development only.
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    volumes:
+      # Config (user-editable)
+      - ./usr/.env:/app/usr/.env
+      - ./atlas:/app/atlas
+      - ./tools:/app/tools
+      # Persistent data
+      - ./memory:/app/memory
+      - ./knowledge:/app/knowledge
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Tailscale state (survives container restarts)
+      - tailscale-state:/var/lib/tailscale
+
+volumes:
+  tailscale-state:
