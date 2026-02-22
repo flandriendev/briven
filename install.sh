@@ -533,7 +533,7 @@ if [[ -n "$CH_SELECTION" ]]; then
                     OFFSET=$((LAST_ID + 1))
 
                     printf "\n"
-                    printf "  ${BRED}${BOLD}Pairing:${RST} briven pair ${BRED}${BOLD}%s${RST}\n" "$PAIR_CODE"
+                    printf "  ${BRED}${BOLD}Pairing:${RST} briven pairing approve telegram ${BRED}${BOLD}%s${RST}\n" "$PAIR_CODE"
                     printf "\n"
                     dimtext "Open your bot in Telegram and send the command above."
                     dimtext "Waiting for pairing message (60s)..."
