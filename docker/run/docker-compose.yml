@@ -1,0 +1,8 @@
+services:
+  briven:
+    container_name: briven
+    image: briven/briven:latest
+    volumes:
+      - ./briven:/briven
+    ports:
+      - "50080:80"
