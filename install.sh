@@ -150,17 +150,18 @@ pip install --upgrade pip setuptools wheel --quiet
 PY_MINOR=$("$PYTHON" -c 'import sys; print(sys.version_info.minor)')
 if [[ "$PY_MINOR" -ge 13 ]]; then
     info "Python 3.13+ detected — patching requirements for compatibility..."
-    # Disable kokoro (no 3.13 wheel)
+    # 1. Disable kokoro (no 3.13 wheel)
     sed -i 's/^kokoro/#kokoro/' requirements.txt
-    # Upgrade unstructured (0.16.23 pulls onnxruntime<=1.19.2 which has no 3.13 wheel)
+    # 2. Disable langchain-unstructured (pins onnxruntime<=1.19.2, no 3.13 wheel)
+    sed -i 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
+    # 3. Upgrade unstructured (0.16.23 needs onnxruntime<=1.19.2 via transitive deps)
     sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
-    # Handle date-based versions that don't work with ~= (needs x.y format)
-    sed -i 's/^openai-whisper==\([0-9]*\)$/openai-whisper>=\1/' requirements.txt
-    # Use compatible-release (~=) for all remaining strict pins so pip can
-    # resolve patch-level fixes without jumping major versions
-    # e.g. langchain-core==0.3.49 → ~=0.3.49 (allows 0.3.x, blocks 0.4+)
-    sed -i '/^[^#]/s/==/~=/' requirements.txt
-    ok "Patched: kokoro disabled, unstructured→0.20.8, pins relaxed (~=) for 3.13"
+    # 4. Unpin packages that conflict with unstructured 0.20.8
+    sed -i 's/^markdown==.*/markdown/' requirements.txt
+    sed -i 's/^unstructured-client==.*/unstructured-client/' requirements.txt
+    sed -i 's/^pypdf==.*/pypdf/' requirements.txt
+    sed -i 's/^browser-use==.*/browser-use/' requirements.txt
+    ok "Patched: kokoro+langchain-unstructured disabled, unstructured→0.20.8, conflict pins removed"
 fi
 
 info "Installing dependencies (this may take a few minutes)..."
@@ -170,9 +171,12 @@ else
     # Fallback: try disabling kokoro + upgrading unstructured
     warn "pip install failed — retrying with compatibility patches..."
     sed -i 's/^kokoro/#kokoro/' requirements.txt
+    sed -i 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
     sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
-    sed -i 's/^openai-whisper==\([0-9]*\)$/openai-whisper>=\1/' requirements.txt
-    sed -i '/^[^#]/s/==/~=/' requirements.txt
+    sed -i 's/^markdown==.*/markdown/' requirements.txt
+    sed -i 's/^unstructured-client==.*/unstructured-client/' requirements.txt
+    sed -i 's/^pypdf==.*/pypdf/' requirements.txt
+    sed -i 's/^browser-use==.*/browser-use/' requirements.txt
     if pip install -r requirements.txt --quiet 2>&1; then
         ok "Dependencies installed (kokoro/TTS disabled for compatibility)."
     else
