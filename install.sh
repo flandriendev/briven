@@ -23,17 +23,17 @@ BRIVEN_PORT="${BRIVEN_PORT:-8000}"
 TOTAL_STEPS=10
 CURRENT_STEP=0
 
-# ── Colors ─────────────────────────────────────────────────
+# ── Colors (ANSI-C quoting for proper rendering in heredocs) ──
 # Briven red: RGB 221,63,42 / #dd3f2a
-BRED='\e[38;2;221;63;42m'
-RED='\e[31m'
-YEL='\e[33m'
-GRN='\e[32m'
-CYN='\e[36m'
-WHT='\e[97m'
-BOLD='\e[1m'
-DIM='\e[2m'
-RST='\e[0m'
+BRED=$'\e[38;2;221;63;42m'
+RED=$'\e[31m'
+YEL=$'\e[33m'
+GRN=$'\e[32m'
+CYN=$'\e[36m'
+WHT=$'\e[97m'
+BOLD=$'\e[1m'
+DIM=$'\e[2m'
+RST=$'\e[0m'
 
 # ── Output helpers ─────────────────────────────────────────
 info()    { printf "  ${BRED}[INFO]${RST}    %s\n" "$*"; }
@@ -258,37 +258,17 @@ source .venv/bin/activate
 pip install --upgrade pip setuptools wheel --quiet
 
 # ── Python 3.13+ compatibility patches ────────────────────
-# These packages have known issues on Python 3.13:
-#   kokoro        — requires_python <3.13 (explicitly excluded)
+# These packages have no Python 3.13 support:
+#   kokoro              — requires_python <3.13 (explicitly excluded)
 #   langchain-unstructured — pins onnxruntime<=1.19.2 (no 3.13 wheel)
-#   unstructured 0.16.23   — needs onnxruntime<=1.19.2 transitively
-#   openai-whisper — sdist-only, numba/torch chain risky on 3.13
-# When upgrading unstructured, these conflict with the new version:
-#   markdown==3.7, pypdf==6.0.0, unstructured-client==0.31.0
+#   openai-whisper      — sdist-only, numba/torch chain breaks on 3.13
 
 if [[ "$PY_MINOR" -ge 13 ]]; then
-    info "Python 3.13+ detected — applying compatibility patches..."
-
-    # Disable packages with no 3.13 support
+    info "Python 3.13+ detected — disabling incompatible packages..."
     sed -i 's/^kokoro/#kokoro/' requirements.txt
     sed -i 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
     sed -i 's/^openai-whisper/#openai-whisper/' requirements.txt
-
-    # Upgrade unstructured to version that doesn't need onnxruntime<=1.19.2
-    sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]>=0.16.23/' requirements.txt
-
-    # Unpin packages that conflict with newer unstructured
-    sed -i 's/^markdown==.*/markdown/' requirements.txt
-    sed -i 's/^unstructured-client==.*/unstructured-client/' requirements.txt
-    sed -i 's/^pypdf==.*/pypdf/' requirements.txt
-
-    # Ensure openai is new enough for browser-use compatibility
-    if ! grep -q '^openai>=' requirements.txt; then
-        printf 'openai>=2.7.2\n' >> requirements.txt
-    fi
-
-    ok "Patches applied: kokoro, langchain-unstructured, openai-whisper disabled"
-    ok "unstructured unpinned, conflict pins loosened"
+    ok "Disabled: kokoro, langchain-unstructured, openai-whisper"
 fi
 
 # Ensure /tmp has space (tmpfs can fill up on VPS)
@@ -302,22 +282,19 @@ if [[ -d /tmp ]] && command -v df >/dev/null 2>&1; then
 fi
 
 info "Installing dependencies (this may take a few minutes)..."
-if pip install -r requirements.txt --quiet 2>&1; then
+if pip install -r requirements.txt 2>&1; then
     ok "Dependencies installed successfully"
 else
-    warn "First attempt failed — retrying with extended compatibility patches..."
-    # Apply same patches as 3.13 block (catches edge cases on 3.12 too)
+    warn "First attempt failed — retrying with reduced packages..."
+    # Disable heavy/optional packages that commonly cause conflicts
     sed -i 's/^kokoro/#kokoro/' requirements.txt
     sed -i 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
     sed -i 's/^openai-whisper/#openai-whisper/' requirements.txt
-    sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]>=0.16.23/' requirements.txt
-    sed -i 's/^markdown==.*/markdown/' requirements.txt
-    sed -i 's/^unstructured-client==.*/unstructured-client/' requirements.txt
-    sed -i 's/^pypdf==.*/pypdf/' requirements.txt
-    if pip install -r requirements.txt --quiet 2>&1; then
-        ok "Dependencies installed (kokoro/whisper/TTS disabled for compatibility)"
+    sed -i 's/^sentence-transformers/#sentence-transformers/' requirements.txt
+    if pip install -r requirements.txt 2>&1; then
+        ok "Dependencies installed (some optional packages disabled)"
     else
-        err "pip install failed. Check requirements.txt and Python version."
+        err "pip install failed. Run manually: cd $INSTALL_DIR && source .venv/bin/activate && pip install -r requirements.txt"
     fi
 fi
 [[ -f requirements2.txt ]] && pip install -r requirements2.txt --quiet 2>/dev/null || true
