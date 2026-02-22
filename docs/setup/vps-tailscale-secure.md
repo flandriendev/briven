@@ -618,7 +618,17 @@ sudo ufw allow in on tailscale0
 sudo ufw enable
 ```
 
-### 6.5 Full Rollback (start over cleanly)
+### 6.5 Common Issues
+
+| Problem | Fix |
+|---------|-----|
+| Can't reach from local machine | Ensure both machines are on the same tailnet (`tailscale status`) |
+| Service fails to start | `journalctl -u briven -n 50` for error details |
+| `ModuleNotFoundError` | Wrong Python path in service; check `ExecStart` points to `.venv/bin/uvicorn` |
+| LLM API errors | Verify key in `.env`, confirm `EnvironmentFile` path in unit file |
+| Tailscale IP changes on restart | Pin IP in Tailscale admin console (Machines → Edit route settings) |
+
+### 6.6 Full Rollback (start over cleanly)
 
 ```bash
 # Stop the service

@@ -8,8 +8,8 @@ Welcome to the Briven documentation hub. Whether you're getting started or divin
 
 - **[Quickstart Guide](quickstart.md):** Get up and running in 5 minutes with Briven.
 - **[Installation Guide](setup/installation.md):** Detailed setup instructions for all platforms (or [update your installation](setup/installation.md#how-to-update-briven)).
-- **[Mac Mini — Native Install](install-mac-mini.md):** Run Briven natively (no Docker) on a Mac Mini with Tailscale.
-- **[VPS Server — Native Install](install-vps-server.md):** Run Briven natively on Ubuntu/Debian with systemd + Tailscale.
+- **[Mac Mini — Native Install](setup/mac-mini.md):** Run Briven natively (no Docker) on a Mac Mini with Tailscale.
+- **[VPS + Tailscale — Secure Deploy](setup/vps-tailscale-secure.md):** Deploy Briven natively on Ubuntu with Tailscale zero-trust + UFW + fail2ban.
 - **[VPS Deployment (Docker)](setup/vps-deployment.md):** Deploy Briven on a remote server using Docker + Apache.
 - **[Development Setup](setup/dev-setup.md):** Set up a local development environment.
 

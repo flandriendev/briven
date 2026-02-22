@@ -19,8 +19,8 @@
 
 [Introduction](#what-is-briven) •
 [Quick Start](#quick-start) •
-[Installation](./docs/install-mac-mini.md) •
-[VPS Deployment](./docs/install-vps-server.md) •
+[Installation](./docs/setup/mac-mini.md) •
+[VPS Deployment](./docs/setup/vps-tailscale-secure.md) •
 [Usage](./docs/guides/usage.md) •
 [Architecture](./docs/developer/architecture.md)
 
@@ -60,7 +60,7 @@ uvicorn run_ui:app --host 0.0.0.0 --port 8000
 ```
 
 > **Tailscale users:** After setup, bind to your Tailscale IP (`--host 100.x.x.x`) for zero-trust access with no exposed ports.
-> See [install-mac-mini.md](./docs/install-mac-mini.md) for the full Tailscale-native setup.
+> See [Mac Mini Setup](./docs/setup/mac-mini.md) for the full Tailscale-native setup.
 
 ---
 
@@ -146,8 +146,9 @@ briven/
 ├── memory/                 # Persistent memory (MEMORY.md + daily logs)
 ├── knowledge/              # RAG knowledge base
 ├── docs/                   # Documentation
-│   ├── install-mac-mini.md
-│   ├── install-vps-server.md
+│   └── setup/
+│       ├── mac-mini.md
+│       ├── vps-tailscale-secure.md
 │   └── guides/
 ├── webui/                  # Web interface
 ├── run_ui.py               # Main server entrypoint
@@ -169,22 +170,26 @@ briven/
 
 ## ⚙️ Configuration
 
-Copy `.env.example` to `.env` and fill in:
+Copy `usr/.env.example` to `usr/.env` and fill in your API keys:
 
 ```bash
-# LLM provider (openrouter recommended)
-OPENROUTER_API_KEY=sk-or-...
-
-# Or OpenAI directly
-OPENAI_API_KEY=sk-...
+# LLM provider — pick one or more (Briven uses LiteLLM for multi-provider switching)
+API_KEY_OPENROUTER=sk-or-...   # OpenRouter (200+ models with one key, recommended)
+API_KEY_OPENAI=sk-...          # OpenAI (GPT-4o, o1, o3)
+API_KEY_ANTHROPIC=sk-ant-...   # Anthropic (Claude 4.5, Claude 4)
+API_KEY_XAI=xai-...            # xAI / Grok (strong reasoning/code)
+API_KEY_GOOGLE=AIzaSy-...      # Google Gemini (multimodal)
+API_KEY_DEEPSEEK=sk-...        # DeepSeek (cost-effective)
 
 # Tailscale (optional but recommended)
 TAILSCALE_AUTH_KEY=tskey-auth-...
 
 # Automated settings via env vars
 BRIVEN_SET_chat_model=openrouter/anthropic/claude-sonnet-4-6
-BRIVEN_SET_work_dir=/home/user/briven-workspace
+BRIVEN_SET_work_dir=/home/briven/workspace
 ```
+
+> See `usr/.env.example` for all supported providers (20+), messaging integrations, and configuration options.
 
 ---
 
@@ -192,8 +197,8 @@ BRIVEN_SET_work_dir=/home/user/briven-workspace
 
 | Page | Description |
 |------|-------------|
-| [install-mac-mini.md](./docs/install-mac-mini.md) | Native Python + Tailscale setup on Mac Mini |
-| [install-vps-server.md](./docs/install-vps-server.md) | VPS deployment with systemd + Tailscale |
+| [Mac Mini Setup](./docs/setup/mac-mini.md) | Native Python + Tailscale setup on Mac Mini |
+| [VPS + Tailscale](./docs/setup/vps-tailscale-secure.md) | VPS deployment with Tailscale zero-trust |
 | [Usage Guide](./docs/guides/usage.md) | Basic and advanced usage |
 | [Architecture](./docs/developer/architecture.md) | System design and components |
 | [Extensions](./docs/developer/extensions.md) | Extending Briven |

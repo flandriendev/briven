@@ -62,6 +62,12 @@ chat:
   ollama:
     name: Ollama
     litellm_provider: ollama
+  perplexity:
+    name: Perplexity AI
+    litellm_provider: perplexity
+  cohere:
+    name: Cohere
+    litellm_provider: cohere
   openai:
     name: OpenAI
     litellm_provider: openai
