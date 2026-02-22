@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # ── System deps + Tailscale ──────────────────────────────────
 RUN apt-get update \
@@ -9,7 +9,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# ── Python deps (cached layer) ───────────────────────────────
+# ── Python deps (cached layer — only rebuilds when requirements change) ──
 COPY requirements.txt requirements2.txt* ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \

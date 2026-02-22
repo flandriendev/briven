@@ -12,7 +12,7 @@
 [![GitHub](https://img.shields.io/badge/GitHub-flandriendev%2Fbriven-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/flandriendev/briven)
 [![Website](https://img.shields.io/badge/Website-briven.ai-blue?style=for-the-badge&logo=safari&logoColor=white)](https://briven.ai)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](./LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Tailscale](https://img.shields.io/badge/Networking-Tailscale-4B32C3?style=for-the-badge&logo=tailscale&logoColor=white)](https://tailscale.com)
 
 ## Documentation
@@ -44,13 +44,13 @@
 
 ### Native Install (recommended)
 
-One command on a fresh Ubuntu/Debian VPS — installs Python, Tailscale, and creates a systemd service:
+One command on a fresh Ubuntu 22.04/24.04 VPS — installs Python 3.12, Tailscale, and creates a systemd service:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
-The script will prompt you for a [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) to enable zero-trust networking (no exposed ports). Then:
+The script will prompt you for a [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) to enable zero-trust networking (no exposed ports). After install:
 
 ```bash
 nano ~/briven/usr/.env          # Add at least one LLM API key
@@ -60,12 +60,13 @@ journalctl -u briven -f         # Watch logs
 
 Open **http://\<your-tailscale-ip\>:8000** from any device on your tailnet.
 
+> **Python 3.12 is required.** Some dependencies (kokoro) are incompatible with Python 3.13+. The installer handles this automatically via the [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa).
+
 ### Docker Install (optional)
 
 ```bash
 git clone https://github.com/flandriendev/briven.git && cd briven
-cp usr/.env.example usr/.env    # Add your API keys
-nano usr/.env
+cp usr/.env.example usr/.env && nano usr/.env   # Add your API keys
 
 # Start with Tailscale inside the container:
 TAILSCALE_AUTHKEY=tskey-auth-xxxxx docker compose up -d

@@ -2,7 +2,8 @@ services:
   briven:
     build: .
     container_name: briven
-    restart: always
+    restart: unless-stopped
+    env_file: .env
 
     # Required for Tailscale inside the container
     cap_add:

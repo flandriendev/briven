@@ -5,17 +5,18 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 #
-# Target:  Fresh Ubuntu/Debian VPS (sudo access assumed)
+# Target:  Ubuntu 22.04 / 24.04 VPS (sudo access assumed)
 # Also:    macOS (skips systemd, prints manual start commands)
+# Python:  3.12 required (kokoro and other deps break on 3.13+)
 # Security: Tailscale-only networking — no ports exposed
 # Idempotent: Safe to re-run at any time
 # ============================================================
-set -eo pipefail
+set -euo pipefail
 
 REPO="https://github.com/flandriendev/briven.git"
 INSTALL_DIR="${BRIVEN_DIR:-$HOME/briven}"
-PYTHON="${PYTHON:-python3}"
 BRIVEN_PORT="${BRIVEN_PORT:-8000}"
+REQUIRED_PY="3.12"
 
 # ── Colors ────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -52,36 +53,64 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════
-# Step 1 — System dependencies
+# Step 1 — System dependencies + Python 3.12
 # ══════════════════════════════════════════════════════════════
-step "1/10" "System dependencies"
+step "1/10" "System dependencies + Python $REQUIRED_PY"
+
+PYTHON=""
 
 if $IS_LINUX; then
-    DEPS=(git curl python3 python3-pip python3-venv python3-dev build-essential)
+    # Base packages first
+    BASE_DEPS=(git curl build-essential software-properties-common)
     MISSING=()
-    for dep in "${DEPS[@]}"; do
+    for dep in "${BASE_DEPS[@]}"; do
         if ! dpkg-query -W -f='${Status}' "$dep" 2>/dev/null | grep -q "ok installed"; then
             MISSING+=("$dep")
         fi
     done
     if [[ ${#MISSING[@]} -gt 0 ]]; then
-        info "Installing: ${MISSING[*]}"
+        info "Installing base packages: ${MISSING[*]}"
         sudo apt-get update -qq
         sudo apt-get install -y -qq "${MISSING[@]}"
     fi
+
+    # Python 3.12 — add deadsnakes PPA if not available
+    if ! apt-cache show "python${REQUIRED_PY}" >/dev/null 2>&1; then
+        info "Adding deadsnakes PPA for Python $REQUIRED_PY..."
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt-get update -qq
+    fi
+
+    info "Installing Python ${REQUIRED_PY}..."
+    sudo apt-get install -y -qq \
+        "python${REQUIRED_PY}" \
+        "python${REQUIRED_PY}-venv" \
+        "python${REQUIRED_PY}-dev"
+
+    PYTHON="python${REQUIRED_PY}"
     success "System packages ready."
 else
+    # macOS — check for python3.12, fall back to python3 if compatible
     command -v git >/dev/null 2>&1 || die "git required. Install: brew install git"
-    command -v "$PYTHON" >/dev/null 2>&1 || die "Python 3 required. Install: brew install python"
+    if command -v "python${REQUIRED_PY}" >/dev/null 2>&1; then
+        PYTHON="python${REQUIRED_PY}"
+    elif command -v python3 >/dev/null 2>&1; then
+        PYVER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        if [[ "$PYVER" == "$REQUIRED_PY" ]]; then
+            PYTHON=python3
+        else
+            die "Python $REQUIRED_PY required (found $PYVER). Install: brew install python@$REQUIRED_PY"
+        fi
+    else
+        die "Python $REQUIRED_PY required. Install: brew install python@$REQUIRED_PY"
+    fi
     success "System packages ready (macOS)."
 fi
 
-# Verify Python version
-command -v "$PYTHON" >/dev/null 2>&1 || die "Python 3 not found."
+# Verify Python is working
+command -v "$PYTHON" >/dev/null 2>&1 || die "Python $REQUIRED_PY not found after install."
 PYVER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-PYMAJOR="${PYVER%%.*}"
-PYMINOR="${PYVER##*.}"
-[[ "$PYMAJOR" -ge 3 && "$PYMINOR" -ge 10 ]] || die "Python 3.10+ required (got $PYVER)."
+[[ "$PYVER" == "$REQUIRED_PY" ]] || die "Expected Python $REQUIRED_PY but got $PYVER."
 success "Python $PYVER"
 
 # ══════════════════════════════════════════════════════════════
@@ -138,10 +167,19 @@ success "Repository ready."
 # ══════════════════════════════════════════════════════════════
 # Step 5 — Python venv + dependencies
 # ══════════════════════════════════════════════════════════════
-step "5/10" "Python environment"
+step "5/10" "Python environment (venv + pip)"
+
+if [[ -d .venv ]]; then
+    # Verify existing venv uses the right Python version
+    VENV_PYVER=$(.venv/bin/python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "")
+    if [[ "$VENV_PYVER" != "$REQUIRED_PY" ]]; then
+        warn "Existing venv uses Python $VENV_PYVER — recreating with $REQUIRED_PY..."
+        rm -rf .venv
+    fi
+fi
 
 if [[ ! -d .venv ]]; then
-    info "Creating virtual environment..."
+    info "Creating virtual environment with Python $REQUIRED_PY..."
     "$PYTHON" -m venv .venv
 fi
 # shellcheck disable=SC1091

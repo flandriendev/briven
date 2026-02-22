@@ -1,5 +1,5 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
 BRIVEN_PORT="${BRIVEN_PORT:-8000}"
 BIND_HOST="0.0.0.0"
@@ -12,8 +12,8 @@ if [[ -n "${TAILSCALE_AUTHKEY:-}" ]]; then
         --socket=/var/run/tailscale/tailscaled.sock \
         --tun=userspace-networking &
 
-    # Wait for daemon to be ready
-    for i in $(seq 1 15); do
+    # Wait for daemon to be ready (up to 15s)
+    for _ in $(seq 1 15); do
         if tailscale --socket=/var/run/tailscale/tailscaled.sock status >/dev/null 2>&1; then
             break
         fi
@@ -36,7 +36,7 @@ if [[ -n "${TAILSCALE_AUTHKEY:-}" ]]; then
     fi
 else
     echo "[briven] No TAILSCALE_AUTHKEY set — binding to 0.0.0.0"
-    echo "[briven] WARNING: Set TAILSCALE_AUTHKEY for zero-trust networking"
+    echo "[briven] Set TAILSCALE_AUTHKEY for zero-trust networking"
 fi
 
 # ── Environment file ─────────────────────────────────────────
