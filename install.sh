@@ -157,10 +157,10 @@ if [[ "$PY_MINOR" -ge 13 ]]; then
     # 3. Upgrade unstructured (0.16.23 needs onnxruntime<=1.19.2 via transitive deps)
     sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
     # 4. Unpin packages that conflict with unstructured 0.20.8
+    #    (keep browser-use pinned — newer versions need langchain 1.x)
     sed -i 's/^markdown==.*/markdown/' requirements.txt
     sed -i 's/^unstructured-client==.*/unstructured-client/' requirements.txt
     sed -i 's/^pypdf==.*/pypdf/' requirements.txt
-    sed -i 's/^browser-use==.*/browser-use/' requirements.txt
     ok "Patched: kokoro+langchain-unstructured disabled, unstructured→0.20.8, conflict pins removed"
 fi
 
@@ -176,7 +176,6 @@ else
     sed -i 's/^markdown==.*/markdown/' requirements.txt
     sed -i 's/^unstructured-client==.*/unstructured-client/' requirements.txt
     sed -i 's/^pypdf==.*/pypdf/' requirements.txt
-    sed -i 's/^browser-use==.*/browser-use/' requirements.txt
     if pip install -r requirements.txt --quiet 2>&1; then
         ok "Dependencies installed (kokoro/TTS disabled for compatibility)."
     else
