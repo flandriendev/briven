@@ -154,12 +154,11 @@ if [[ "$PY_MINOR" -ge 13 ]]; then
     sed -i 's/^kokoro/#kokoro/' requirements.txt
     # Upgrade unstructured (0.16.23 pulls onnxruntime<=1.19.2 which has no 3.13 wheel)
     sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
-    # Loosen all remaining strict pins (==) to minimums (>=) so pip can resolve
-    # compatible versions across the new dependency tree
-    sed -i '/^[^#]/s/==/>=/' requirements.txt
-    # Ensure openai is new enough for loosened browser-use (0.11+ needs openai>=2.7.2)
-    printf 'openai>=2.7.2\n' >> requirements.txt
-    ok "Patched: kokoro disabled, unstructured→0.20.8, all pins loosened for 3.13"
+    # Use compatible-release (~=) for all remaining strict pins so pip can
+    # resolve patch-level fixes without jumping major versions
+    # e.g. langchain-core==0.3.49 → ~=0.3.49 (allows 0.3.x, blocks 0.4+)
+    sed -i '/^[^#]/s/==/~=/' requirements.txt
+    ok "Patched: kokoro disabled, unstructured→0.20.8, pins relaxed (~=) for 3.13"
 fi
 
 info "Installing dependencies (this may take a few minutes)..."
@@ -170,7 +169,7 @@ else
     warn "pip install failed — retrying with compatibility patches..."
     sed -i 's/^kokoro/#kokoro/' requirements.txt
     sed -i 's/^unstructured\[all-docs\]==0.16.23/unstructured[all-docs]==0.20.8/' requirements.txt
-    sed -i '/^[^#]/s/==/>=/' requirements.txt
+    sed -i '/^[^#]/s/==/~=/' requirements.txt
     if pip install -r requirements.txt --quiet 2>&1; then
         ok "Dependencies installed (kokoro/TTS disabled for compatibility)."
     else
