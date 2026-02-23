@@ -111,41 +111,97 @@ Briven uses the **GOTCHA Framework** — a 6-layer architecture:
 ## 💡 Key Features
 
 ### 1. General-purpose Autonomous Agent
+
 - No predefined task scope. Give it any goal — it plans, executes, and adapts.
 - Persistent memory: facts, code snippets, past solutions, instructions — all retrievable via hybrid search.
 
-### 2. Multi-agent Cooperation
-- Every agent has a superior (human or parent agent). Every agent can spawn subordinates.
-- The root agent (Briven) talks directly to the human user. Subordinates handle subtasks.
+### 2. Advanced Memory System
 
-### 3. /atlas-governed Behavior
+- **SQLite + FAISS vector embeddings + BM25 hybrid search** — configurable weighting between keyword and semantic results.
+- Daily session logs in `memory/logs/YYYY-MM-DD.md` with timestamped entries.
+- Persistent curated facts in `memory/MEMORY.md`.
+- Automatic embedding of new entries via `sentence-transformers`.
+- LLM-based memory consolidation to keep the knowledge base clean.
+- Tools: `atlas/memory/` (memory_db, embed_memory, semantic_search, hybrid_search, memory_read, memory_write).
+
+### 3. Tasks & Scheduling
+
+- **Cron-based scheduled tasks**, ad-hoc tasks, and planned tasks with deadline tracking.
+- Auto-retry with exponential backoff and configurable concurrent task limits.
+- Execution history with full audit trail (`usr/scheduler/history.json`).
+- 9 agent tool methods + 6 WebUI API endpoints + full modal editor in the UI.
+
+### 4. Multi-agent Cooperation
+
+- Every agent has a superior (human or parent agent). Every agent can spawn subordinates.
+- **Sequential delegation** via `call_subordinate` — detailed task handoff.
+- **Parallel execution** via `call_agents_parallel` — 2-8 concurrent sub-agents with `asyncio.gather()`.
+- **A2A protocol** via `a2a_chat` — Agent-to-Agent (FastA2A) for cross-system orchestration.
+- 5 agent profiles: briven (root), developer, researcher, hacker, default.
+
+### 5. Messaging Integrations
+
+- **Telegram** — Bot API with auto-discover chat ID via pairing flow.
+- **Slack** — Webhooks + Bot API with channel targeting.
+- **Discord** — Webhooks with rich embeds.
+- **WhatsApp** — Business Cloud API.
+- **Email** — SMTP sending with full header support.
+- All channels configurable via `usr/.env` — set only the ones you use.
+
+### 6. Voice Interface
+
+- **Speech-to-Text** — OpenAI Whisper with API endpoint (`/api/transcribe`).
+- **Text-to-Speech** — Kokoro TTS with API endpoint (`/api/synthesize`).
+- Full WebUI integration with microphone input and voice settings.
+
+### 7. Malicious Skill Protection
+
+- **Static analysis** — 25+ dangerous pattern regexes (subprocess, eval, exec, network exfil, pickle, ctypes, obfuscation).
+- **VirusTotal API** — SHA-256 hash lookup for known-malicious payloads (optional, free tier).
+- **Extension security** — blocked pattern lists for user-supplied extensions (`usr/extensions/`).
+- **Skill validation** — frontmatter schema enforcement, name/description requirements.
+- **Skill registry** — enable/disable skills without deleting files, usage tracking.
+- **Docker isolation** — containerized code execution for untrusted operations.
+- CLI: `python3 tools/skill_scanner.py --path <dir> [--upload] [--no-vt] [--strict]`.
+
+### 8. Observability & Logging
+
+- **Structured audit trail** — JSONL at `usr/logs/audit.jsonl` (login events, settings changes, security blocks, rate limits).
+- **Real-time agent log** — in-memory `Log` with secret masking, typed entries, WebSocket push.
+- **Console + HTML logs** — ANSI colored terminal output + session HTML at `logs/log_*.html`.
+- **Chat persistence** — full conversation history at `usr/chats/{context_id}/chat.json`.
+- **Scheduler history** — task execution audit with status, duration, retry count.
+- **Login guard** — brute-force protection with exponential backoff + audit logging.
+- **Rate limiter** — 60 req/60s per IP with audit trail integration.
+- 94 extension hooks throughout the agent lifecycle for custom instrumentation.
+
+### 9. /atlas-governed Behavior
+
 - System prompt always loads `/atlas` guidelines before acting.
 - Keeps the agent disciplined: checks `goals/manifest.md`, uses existing tools, documents failures.
 
-### 4. Tailscale-first Networking + ACL Enforcement
+### 10. Tailscale-first Networking + ACL Enforcement
+
 - No exposed public ports. Access via Tailscale mesh network.
 - Secure remote access from any device on your tailnet.
 - **ACL enforcement:** Only `tag:admin` devices can reach Briven on port 8000 — all others denied.
 - See `tools/tailscale.py` for integration helpers and ACL management (`--apply-acl`, `--acl-status`).
 
-### 5. Memory System
-- SQLite + vector embeddings + BM25 hybrid search.
-- Daily session logs in `memory/logs/`.
-- Persistent facts in `memory/MEMORY.md`.
-- Tools: `atlas/memory/memory_read.py`, `memory_write.py`, `hybrid_search.py`.
+### 11. Fully Customizable
 
-### 6. Fully Customizable
 - Every prompt lives in `prompts/` — edit to change behavior completely.
 - Every tool lives in `python/tools/` — extend without touching core code.
 - Subagent profiles in `agents/` — specialized roles (developer, researcher, hacker, etc.).
 - Env-var driven configuration via `BRIVEN_SET_*` prefix.
 
-### 7. Skills (SKILL.md Standard)
+### 12. Skills (SKILL.md Standard)
+
 - Portable, structured agent capabilities.
 - Compatible with Claude Code, Cursor, OpenAI Codex CLI, GitHub Copilot.
 - Import and manage via the Web UI.
 
-### 8. MCP + A2A Protocol
+### 13. MCP + A2A Protocol
+
 - Briven can act as an MCP server or consume external MCP tools.
 - Agent-to-Agent (A2A) protocol for multi-agent orchestration across systems.
 
@@ -170,7 +226,7 @@ briven/
 │   ├── helpers/            # Framework utilities
 │   ├── api/                # REST API endpoints
 │   └── extensions/         # Hook-based extensions
-├── tools/                  # Custom/user tools (tailscale, telegram, etc.)
+├── tools/                  # Custom/user tools (tailscale, telegram, skill_scanner, etc.)
 ├── memory/                 # Persistent memory (MEMORY.md + daily logs)
 ├── knowledge/              # RAG knowledge base
 ├── docs/                   # Documentation

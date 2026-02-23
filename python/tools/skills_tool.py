@@ -140,6 +140,16 @@ class SkillsTool(Tool):
         if not skill:
             return f"Error: skill not found: {skill_name!r}. Try skills_tool method=list or method=search."
 
+        # Security scan for user-supplied skills (from usr/ paths)
+        try:
+            if "/usr/" in str(skill.path):
+                from tools.skill_scanner import check_skill_safe
+                is_safe, reason = check_skill_safe(skill.path)
+                if not is_safe:
+                    return f"Error: skill '{skill_name}' blocked by security scan: {reason}"
+        except ImportError:
+            pass  # scanner not available — allow loading
+
         # Record usage in registry
         try:
             record_skill_use(skill.name)
