@@ -56,6 +56,7 @@ Daily logs are automatically saved to `usr/logs/YYYY-MM-DD.md`. Each entry inclu
 
 **Native Installer (install.sh)**
 
+- **Visual TUI not appearing (plain text output):** The installer auto-downloads [gum](https://github.com/charmbracelet/gum) for polished terminal UI (styled boxes, spinners, radio-button selectors). If gum download fails (no internet during bootstrap, unsupported architecture), it falls back to a pure-bash TUI that works identically. This is cosmetic only — all functionality is preserved.
 - **"No space left on device" during pip install:** On VPS without a GPU, PyTorch downloads ~2GB of NVIDIA CUDA packages by default. The installer auto-detects GPU (via `nvidia-smi`) and installs CPU-only PyTorch when no GPU is present. If you're running an older version of the installer, update it: `curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash`
 - **macOS: `sed: invalid command code` errors:** The installer uses a macOS-compatible `sed` wrapper. If you see this error, you may be running a modified version. Re-download the latest installer.
 - **Installer hangs at "Waiting for Telegram...":** You have 90 seconds to open your Telegram bot and press START. If you miss it, re-run the installer or manually set `TELEGRAM_CHAT_ID` in `usr/.env`.

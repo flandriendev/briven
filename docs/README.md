@@ -17,7 +17,7 @@ Run the cross-platform interactive installer — supports **macOS, Linux (Ubuntu
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
-The TUI installer handles everything: dependencies, Python venv, GPU detection, LLM provider selection (including free local options like Ollama and LM Studio), messaging channels, firewall, and service creation. See the [Installation Guide](setup/installation.md#alternative-native-install-no-docker) for details.
+The installer features a polished visual TUI powered by [gum](https://github.com/charmbracelet/gum) — styled boxes, animated spinners, radio-button selectors, and structured log output. It handles everything: dependencies, Python venv, GPU detection, LLM provider selection (including free local options like Ollama and LM Studio), messaging channels, firewall, and service creation. Falls back to a pure-bash TUI if gum cannot be downloaded. See the [Installation Guide](setup/installation.md#alternative-native-install-no-docker) for details.
 
 ### Platform-Specific Guides
 

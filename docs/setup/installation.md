@@ -585,7 +585,7 @@ curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh
 > [!IMPORTANT]
 > **Disclaimer:** The installer will ask you to accept a security disclaimer before proceeding. Briven is a powerful AI agent framework that can execute commands, read/write files, and access external services. You are solely responsible for how you deploy and configure Briven. Briven and its contributors accept no liability for any damage, data loss, or security issues arising from its use. Always follow the security best practices outlined in the installer and documentation.
 
-The installer provides a full TUI with arrow-key navigation and guides you through 10 steps:
+The installer features a polished visual TUI powered by [gum](https://github.com/charmbracelet/gum) (Charmbracelet) — styled boxes, animated spinners, radio-button selectors, and structured log output. Gum is auto-downloaded at startup; if unavailable, the installer falls back to a pure-bash TUI. It guides you through 10 steps:
 
 1. **System dependencies** — auto-detects your OS and installs via the appropriate package manager (apt, brew, dnf, pacman, zypper)
 2. **Clone repository** — clones to `~/briven`

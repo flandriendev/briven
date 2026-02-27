@@ -30,7 +30,7 @@ No port forwarding needed. Briven will bind to your Tailscale IP for secure acce
 
 ## 2. Install Briven (Interactive Installer)
 
-The installer provides a full TUI (text-based UI) with arrow-key navigation, progress bars, and guided setup for all 10 steps:
+The installer features a polished visual TUI powered by [gum](https://github.com/charmbracelet/gum) (Charmbracelet) — styled boxes, animated spinners, radio-button selectors, and structured log output. Gum is auto-downloaded at startup; if unavailable, it falls back to a pure-bash TUI. It guides you through all 10 steps:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash

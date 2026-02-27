@@ -342,7 +342,7 @@ python3 --version
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
-The interactive TUI installer guides you through 10 steps:
+The installer features a polished visual TUI powered by [gum](https://github.com/charmbracelet/gum) (Charmbracelet) — styled boxes, animated spinners, radio-button selectors, and structured log output. Gum is auto-downloaded at startup; if unavailable, it falls back to a pure-bash TUI. It guides you through 10 steps:
 1. Install system dependencies (Python 3.12, Git, curl, jq, tesseract, poppler)
 2. Clone the repo to `~/briven`
 3. Create Python venv and install all packages (auto-detects GPU — installs CPU-only PyTorch on VPS without GPU to save ~2GB disk space)

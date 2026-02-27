@@ -44,7 +44,7 @@ Run the interactive installer — works on **macOS, Linux (Ubuntu/Debian/Fedora/
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
-The TUI installer guides you through everything: dependencies, Python venv, LLM provider selection (including free local options like Ollama and LM Studio), messaging channels, firewall, and service creation. See the [full Installation Guide](setup/installation.md#alternative-native-install-no-docker) for details.
+The installer features a polished visual TUI powered by [gum](https://github.com/charmbracelet/gum) — styled boxes, animated spinners, radio-button selectors, and structured log output. It guides you through everything: dependencies, Python venv, LLM provider selection (including free local options like Ollama and LM Studio), messaging channels, firewall, and service creation. Falls back to a pure-bash TUI if gum cannot be downloaded. See the [full Installation Guide](setup/installation.md#alternative-native-install-no-docker) for details.
 
 After the installer completes, open `http://localhost:8000` (or your Tailscale IP) to access the Web UI.
 
