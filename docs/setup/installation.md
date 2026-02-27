@@ -572,6 +572,35 @@ docker run -p 50080:80 \
 
 If you are migrating from older, non-Docker setups, Briven handles the migration of legacy folders and files automatically at runtime. The right place to save your files and directories is `briven/usr`.
 
+---
+
+## Alternative: Native Install (No Docker)
+
+Briven includes a cross-platform interactive installer that runs natively — no Docker required. It supports **macOS, Linux (Ubuntu, Debian, Fedora, Arch, openSUSE), and Windows WSL**.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
+```
+
+The installer provides a full TUI with arrow-key navigation and guides you through 10 steps:
+
+1. **System dependencies** — auto-detects your OS and installs via the appropriate package manager (apt, brew, dnf, pacman, zypper)
+2. **Clone repository** — clones to `~/briven`
+3. **Python environment** — creates venv, installs all packages. Auto-detects GPU: installs CPU-only PyTorch on VPS without GPU (saves ~2GB), uses Apple MPS on macOS
+4. **Tailscale** — optional zero-trust networking (auto-install on Linux, brew on macOS, skip on WSL)
+5. **Environment file** — creates `usr/.env` from template
+6. **LLM provider** — interactive selection: Briven API (recommended), Ollama (free/local), LM Studio (free/local), OpenRouter, Anthropic, OpenAI, Google, Groq, DeepSeek, Mistral, xAI
+7. **Messaging channels** — optional Telegram, Discord, Slack, WhatsApp, Email setup
+8. **Firewall** — UFW + Fail2ban on Linux VPS, skipped on macOS/WSL
+9. **Service creation** — systemd on Linux, `start.sh` script on macOS/WSL
+10. **Start & verify** — launches Briven and confirms it's running
+
+For platform-specific native install guides:
+- **[Mac Mini — Native Install](mac-mini.md)** — macOS with Tailscale
+- **[VPS + Tailscale — Secure Deploy](vps-tailscale-secure.md)** — Ubuntu VPS with zero-trust networking
+
+---
+
 ## Conclusion
 
 After following the instructions for your specific operating system, you should have Briven successfully installed and running. You can now start exploring the framework's capabilities and experimenting with creating your own intelligent agents.

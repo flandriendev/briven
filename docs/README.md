@@ -8,6 +8,19 @@ Welcome to the Briven documentation hub. Whether you're getting started or divin
 
 - **[Quickstart Guide](quickstart.md):** Get up and running in 5 minutes with Briven.
 - **[Installation Guide](setup/installation.md):** Detailed setup instructions for all platforms (or [update your installation](setup/installation.md#how-to-update-briven)).
+
+### Native Install (No Docker)
+
+Run the cross-platform interactive installer — supports **macOS, Linux (Ubuntu/Debian/Fedora/Arch/openSUSE), and Windows WSL**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
+```
+
+The TUI installer handles everything: dependencies, Python venv, GPU detection, LLM provider selection (including free local options like Ollama and LM Studio), messaging channels, firewall, and service creation. See the [Installation Guide](setup/installation.md#alternative-native-install-no-docker) for details.
+
+### Platform-Specific Guides
+
 - **[Mac Mini — Native Install](setup/mac-mini.md):** Run Briven natively (no Docker) on a Mac Mini with Tailscale.
 - **[VPS + Tailscale — Secure Deploy](setup/vps-tailscale-secure.md):** Deploy Briven natively on Ubuntu with Tailscale zero-trust + UFW + fail2ban.
 - **[VPS Deployment (Docker)](setup/vps-deployment.md):** Deploy Briven on a remote server using Docker + Apache.
@@ -45,6 +58,7 @@ Welcome to the Briven documentation hub. Whether you're getting started or divin
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+  - [Native Install (No Docker)](#native-install-no-docker)
   - [Quickstart Guide](quickstart.md)
   - [Installation Guide](setup/installation.md)
     - [Step 1: Install Docker Desktop](setup/installation.md#step-1-install-docker-desktop)

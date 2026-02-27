@@ -342,12 +342,19 @@ python3 --version
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
-This will:
-1. Clone the repo to `~/briven`
-2. Create a Python virtual environment at `~/briven/.venv`
-3. Install all 54+ dependencies from `requirements.txt`
-4. Create a `.env` from `.env.example` if none exists
-5. Print your Tailscale IP and the startup command
+The interactive TUI installer guides you through 10 steps:
+1. Install system dependencies (Python 3.12, Git, curl, jq, tesseract, poppler)
+2. Clone the repo to `~/briven`
+3. Create Python venv and install all packages (auto-detects GPU — installs CPU-only PyTorch on VPS without GPU to save ~2GB disk space)
+4. Configure Tailscale (auth key or login URL)
+5. Create `usr/.env` from template
+6. **LLM provider setup** — choose from Briven API, Ollama, LM Studio, OpenRouter, Anthropic, OpenAI, Google, Groq, DeepSeek, Mistral, or xAI
+7. Messaging channels (Telegram, Discord, Slack, WhatsApp, Email)
+8. Firewall & security (UFW + Fail2ban on Linux VPS)
+9. Create systemd service (auto-start on boot)
+10. Start Briven and verify
+
+> **Note:** If you already completed Steps 1–3 manually, the installer will detect the existing clone and venv and skip those steps.
 
 ### 4.3 Deploy Your Prepared `.env`
 
@@ -388,6 +395,8 @@ playwright install --with-deps chromium
 
 ### 4.7 Create a systemd Service (auto-start on reboot)
 
+> **Note:** If you used the interactive installer (Step 4.2), the systemd service was already created for you. You can skip this step and verify with `sudo systemctl status briven`.
+
 ```bash
 sudo cat > /etc/systemd/system/briven.service << EOF
 [Unit]
@@ -401,7 +410,7 @@ User=briven
 Group=briven
 WorkingDirectory=/home/briven/briven
 Environment="PATH=/home/briven/briven/.venv/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/home/briven/briven/.venv/bin/uvicorn run_ui:app --host $(tailscale ip -4) --port 8000
+ExecStart=/home/briven/briven/.venv/bin/python3 run_ui.py --host $(tailscale ip -4) --port 8000
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -447,18 +456,20 @@ python3 -c "import dotenv; dotenv.load_dotenv(); print('imports OK')"
 ### 5.2 First Manual Start (foreground — so you see all output)
 
 ```bash
+cd ~/briven
+source .venv/bin/activate
 TS_IP=$(tailscale ip -4)
 echo "Starting Briven on $TS_IP:8000 ..."
 
-uvicorn run_ui:app --host "$TS_IP" --port 8000
+python3 run_ui.py --host "$TS_IP" --port 8000
 ```
 
 **What to watch for in the console:**
 
 | Output | Meaning |
 |--------|---------|
-| `Uvicorn running on http://100.x.x.x:8000` | Server started correctly |
-| `INFO: Application startup complete` | All initializations succeeded |
+| `Starting server at http://100.x.x.x:8000` | Server started correctly |
+| `Briven is running.` | All initializations succeeded |
 | Any `ERROR` or traceback | Problem — read the error, don't ignore it |
 | `ModuleNotFoundError` | Missing dependency — `pip install <module>` |
 | Memory/embedding model download | First run downloads ~100MB of model files — normal |
@@ -624,7 +635,7 @@ sudo ufw enable
 |---------|-----|
 | Can't reach from local machine | Ensure both machines are on the same tailnet (`tailscale status`) |
 | Service fails to start | `journalctl -u briven -n 50` for error details |
-| `ModuleNotFoundError` | Wrong Python path in service; check `ExecStart` points to `.venv/bin/uvicorn` |
+| `ModuleNotFoundError` | Wrong Python path in service; check `ExecStart` points to `.venv/bin/python3 run_ui.py` |
 | LLM API errors | Verify key in `.env`, confirm `EnvironmentFile` path in unit file |
 | Tailscale IP changes on restart | Pin IP in Tailscale admin console (Machines → Edit route settings) |
 

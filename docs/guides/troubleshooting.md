@@ -54,6 +54,20 @@ Daily logs are automatically saved to `usr/logs/YYYY-MM-DD.md`. Each entry inclu
 
 ## Troubleshooting
 
+**Native Installer (install.sh)**
+
+- **"No space left on device" during pip install:** On VPS without a GPU, PyTorch downloads ~2GB of NVIDIA CUDA packages by default. The installer auto-detects GPU (via `nvidia-smi`) and installs CPU-only PyTorch when no GPU is present. If you're running an older version of the installer, update it: `curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash`
+- **macOS: `sed: invalid command code` errors:** The installer uses a macOS-compatible `sed` wrapper. If you see this error, you may be running a modified version. Re-download the latest installer.
+- **Installer hangs at "Waiting for Telegram...":** You have 90 seconds to open your Telegram bot and press START. If you miss it, re-run the installer or manually set `TELEGRAM_CHAT_ID` in `usr/.env`.
+- **WSL: Tailscale step says "install on Windows host":** Tailscale on WSL routes through the Windows host. Install Tailscale on Windows, not inside WSL.
+- **Fedora/Arch/openSUSE support:** The installer detects your distro and uses the right package manager (dnf, pacman, zypper). If your distro isn't detected, it falls back to manual instructions.
+
+**Startup Issues (Native Install)**
+
+- **`AttributeError: module 'run_ui' has no attribute 'app'`:** You're using an outdated startup command. The correct command is `python3 run_ui.py --host <IP> --port <PORT>`, not `uvicorn run_ui:app`. Update your systemd service or `start.sh` script.
+- **Service fails immediately after install:** Check logs with `journalctl -u briven -n 50`. Common causes: missing `.env` file, no LLM provider configured, or Python path issues in the systemd service.
+- **macOS/WSL — no systemd:** The installer creates a `start.sh` script instead. Run it with `bash ~/briven/start.sh` or set up a launchd plist (macOS). See the [Mac Mini Install Guide](../setup/mac-mini.md#5-auto-start-with-launchd-run-on-login).
+
 **Telegram Pairing**
 
 - **Bot not receiving messages:** Telegram's `getUpdates` is a single-consumer API. If another client (e.g., a test script or another bot instance) is polling, Briven won't receive updates. Stop all other consumers first.
