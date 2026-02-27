@@ -552,6 +552,20 @@ if [[ "$PY_MINOR" -ge 13 ]]; then
     ok "Disabled: kokoro, langchain-unstructured, openai-whisper"
 fi
 
+# ── GPU detection — install PyTorch CPU-only if no GPU ────
+# NVIDIA CUDA packages are ~2GB+ and cause "No space left" on small VPS
+HAS_GPU=false
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    HAS_GPU=true
+    info "NVIDIA GPU detected — installing PyTorch with CUDA support"
+fi
+
+if ! $HAS_GPU; then
+    info "No GPU detected — installing PyTorch CPU-only (saves ~2GB)"
+    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --quiet 2>&1 || true
+    ok "PyTorch CPU installed"
+fi
+
 # Ensure /tmp has space (tmpfs can fill up on VPS)
 if [[ -d /tmp ]] && command -v df >/dev/null 2>&1; then
     TMP_AVAIL=$(df /tmp 2>/dev/null | awk 'NR==2 {print int($4/1024)}' || echo "999999")
@@ -563,7 +577,7 @@ if [[ -d /tmp ]] && command -v df >/dev/null 2>&1; then
 fi
 
 info "Installing dependencies (this may take a few minutes)..."
-if pip install -r requirements.txt 2>&1; then
+if pip install --no-cache-dir -r requirements.txt 2>&1; then
     ok "Dependencies installed successfully"
 else
     warn "First attempt failed — retrying with reduced packages..."
@@ -571,13 +585,13 @@ else
     sed -i 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
     sed -i 's/^openai-whisper/#openai-whisper/' requirements.txt
     sed -i 's/^sentence-transformers/#sentence-transformers/' requirements.txt
-    if pip install -r requirements.txt 2>&1; then
+    if pip install --no-cache-dir -r requirements.txt 2>&1; then
         ok "Dependencies installed (some optional packages disabled)"
     else
         err "pip install failed. Run manually: cd $INSTALL_DIR && source .venv/bin/activate && pip install -r requirements.txt"
     fi
 fi
-[[ -f requirements2.txt ]] && pip install -r requirements2.txt --quiet 2>/dev/null || true
+[[ -f requirements2.txt ]] && pip install --no-cache-dir -r requirements2.txt --quiet 2>/dev/null || true
 ok "All dependencies ready"
 
 # ╔══════════════════════════════════════════════════════════╗
