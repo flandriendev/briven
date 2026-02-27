@@ -52,6 +52,51 @@ case "$(uname -s)" in
         ;;
 esac
 
+# ── Bootstrap gum (Charmbracelet TUI toolkit) ────────────────
+# Downloads a temporary gum binary for polished terminal UI.
+# Falls back to pure-bash TUI helpers if download fails.
+GUM=""
+
+cleanup_gum() {
+    [[ -n "$GUM" ]] && rm -rf "$(dirname "$GUM")" 2>/dev/null || true
+}
+trap cleanup_gum EXIT
+
+bootstrap_gum() {
+    local os="" arch=""
+    case "$(uname -s)" in
+        Darwin) os="Darwin" ;;
+        Linux)  os="Linux" ;;
+        *)      return 1 ;;
+    esac
+    case "$(uname -m)" in
+        x86_64|amd64)   arch="x86_64" ;;
+        aarch64|arm64)  arch="arm64" ;;
+        *)              return 1 ;;
+    esac
+
+    local version="0.17.0"
+    local slug="gum_${version}_${os}_${arch}"
+    local url="https://github.com/charmbracelet/gum/releases/download/v${version}/${slug}.tar.gz"
+    local tmp_dir="/tmp/gum_briven_$$"
+
+    mkdir -p "$tmp_dir"
+    if curl -fsSL --connect-timeout 10 "$url" | tar xz -C "$tmp_dir" 2>/dev/null; then
+        if [[ -x "$tmp_dir/${slug}/gum" ]]; then
+            GUM="$tmp_dir/${slug}/gum"
+        elif [[ -x "$tmp_dir/gum" ]]; then
+            GUM="$tmp_dir/gum"
+        fi
+    fi
+
+    if [[ -z "$GUM" ]]; then
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+}
+
+bootstrap_gum 2>/dev/null || true  # Silently fall back to bash TUI
+
 # ── Colors (ANSI-C quoting for proper rendering in heredocs) ──
 # Briven red: RGB 221,63,42 / #dd3f2a
 BRED=$'\e[38;2;221;63;42m'
@@ -65,44 +110,91 @@ DIM=$'\e[2m'
 RST=$'\e[0m'
 
 # ── Output helpers ─────────────────────────────────────────
-info()    { printf "  ${BRED}[INFO]${RST}    %s\n" "$*"; }
-ok()      { printf "  ${GRN}[  OK  ]${RST}  %s\n" "$*"; }
-warn()    { printf "  ${YEL}[ WARN ]${RST}  %s\n" "$*"; }
-err()     { printf "  ${RED}[ERROR]${RST}   %s\n" "$*" >&2; exit 1; }
-dimtext() { printf "  ${DIM}%s${RST}\n" "$*"; }
+info() {
+    if [[ -n "$GUM" ]]; then
+        $GUM log --level info "$*"
+    else
+        printf "  ${BRED}[INFO]${RST}    %s\n" "$*"
+    fi
+}
+ok() {
+    if [[ -n "$GUM" ]]; then
+        $GUM log --level info --prefix "✓" "$*"
+    else
+        printf "  ${GRN}[  OK  ]${RST}  %s\n" "$*"
+    fi
+}
+warn() {
+    if [[ -n "$GUM" ]]; then
+        $GUM log --level warn "$*"
+    else
+        printf "  ${YEL}[ WARN ]${RST}  %s\n" "$*"
+    fi
+}
+err() {
+    if [[ -n "$GUM" ]]; then
+        $GUM log --level error "$*" >&2
+    else
+        printf "  ${RED}[ERROR]${RST}   %s\n" "$*" >&2
+    fi
+    exit 1
+}
+dimtext() {
+    if [[ -n "$GUM" ]]; then
+        $GUM style --faint "$*"
+    else
+        printf "  ${DIM}%s${RST}\n" "$*"
+    fi
+}
 
 step() {
     CURRENT_STEP=$((CURRENT_STEP + 1))
     local pct=$((CURRENT_STEP * 100 / TOTAL_STEPS))
-    local filled=$((pct / 5))
-    local empty=$((20 - filled))
-    local bar=""
-    for ((i=0; i<filled; i++)); do bar+="█"; done
-    for ((i=0; i<empty; i++)); do bar+="░"; done
     printf "\n"
-    printf "  ${BRED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
-    printf "  ${BRED}${BOLD}  Step %s/%s${RST}  ${WHT}%s${RST}\n" "$CURRENT_STEP" "$TOTAL_STEPS" "$1"
-    printf "  ${BRED}  %s${RST}  ${DIM}%s%%${RST}\n" "$bar" "$pct"
-    printf "  ${BRED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
+    if [[ -n "$GUM" ]]; then
+        $GUM style \
+            --border rounded --border-foreground 196 \
+            --padding "0 2" --margin "0 2" \
+            --bold --foreground 196 \
+            "[$CURRENT_STEP/$TOTAL_STEPS]  $1  ($pct%)"
+    else
+        local filled=$((pct / 5))
+        local empty=$((20 - filled))
+        local bar=""
+        for ((i=0; i<filled; i++)); do bar+="█"; done
+        for ((i=0; i<empty; i++)); do bar+="░"; done
+        printf "  ${BRED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
+        printf "  ${BRED}${BOLD}  Step %s/%s${RST}  ${WHT}%s${RST}\n" "$CURRENT_STEP" "$TOTAL_STEPS" "$1"
+        printf "  ${BRED}  %s${RST}  ${DIM}%s%%${RST}\n" "$bar" "$pct"
+        printf "  ${BRED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
+    fi
 }
 
 # ── Spinner for long-running tasks ─────────────────────────
 spinner() {
     local pid=$1 msg="${2:-Working...}"
-    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local i=0
-    while kill -0 "$pid" 2>/dev/null; do
-        printf "\r  ${BRED}%s${RST} %s" "${frames[$((i % ${#frames[@]}))]}" "$msg"
-        sleep 0.1
-        i=$((i + 1))
-    done
-    printf "\r%80s\r" ""
+    if [[ -n "$GUM" ]]; then
+        $GUM spin --spinner dot --title "$msg" -- \
+            bash -c "while kill -0 $pid 2>/dev/null; do sleep 0.5; done" 2>/dev/null || true
+    else
+        local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local i=0
+        while kill -0 "$pid" 2>/dev/null; do
+            printf "\r  ${BRED}%s${RST} %s" "${frames[$((i % ${#frames[@]}))]}" "$msg"
+            sleep 0.1
+            i=$((i + 1))
+        done
+        printf "\r%80s\r" ""
+    fi
 }
 
 # ── Interactive input (works with curl | bash via /dev/tty)
 ask() {
     local prompt="$1" val=""
-    if [[ -t 0 ]]; then
+    if [[ -n "$GUM" ]]; then
+        val=$($GUM input --prompt "$prompt " --prompt.foreground 196 \
+            --placeholder "..." < /dev/tty 2>/dev/tty) || true
+    elif [[ -t 0 ]]; then
         read -rp "$prompt" val
     elif [[ -e /dev/tty ]]; then
         read -rp "$prompt" val < /dev/tty
@@ -112,7 +204,10 @@ ask() {
 
 ask_secret() {
     local prompt="$1" val=""
-    if [[ -t 0 ]]; then
+    if [[ -n "$GUM" ]]; then
+        val=$($GUM input --prompt "$prompt " --prompt.foreground 196 \
+            --password < /dev/tty 2>/dev/tty) || true
+    elif [[ -t 0 ]]; then
         read -rsp "$prompt" val
         echo
     elif [[ -e /dev/tty ]]; then
@@ -236,22 +331,34 @@ test_api_connection() {
 
 # ── Draw a box ─────────────────────────────────────────────
 draw_box() {
-    local width=59
-    local border_color="$BRED$BOLD"
-    printf "\n"
-    printf "  ${border_color}┌"
-    printf '─%.0s' $(seq 1 $width)
-    printf "┐${RST}\n"
-    while IFS= read -r line; do
-        local stripped
-        stripped=$(printf '%s' "$line" | sed 's/\x1b\[[0-9;]*m//g')
-        local len=${#stripped}
-        local pad=$((width - len))
-        printf "  ${border_color}│${RST} %s%*s${border_color}│${RST}\n" "$line" "$pad" ""
-    done
-    printf "  ${border_color}└"
-    printf '─%.0s' $(seq 1 $width)
-    printf "┘${RST}\n"
+    local content
+    content=$(cat)  # read from stdin (heredoc)
+    if [[ -n "$GUM" ]]; then
+        # Strip ANSI codes — gum applies its own styling
+        local clean
+        clean=$(printf '%s' "$content" | sed 's/\x1b\[[0-9;]*m//g')
+        printf "\n"
+        printf '%s\n' "$clean" | $GUM style \
+            --border rounded --border-foreground 196 \
+            --padding "1 2" --margin "0 2"
+    else
+        local width=59
+        local border_color="$BRED$BOLD"
+        printf "\n"
+        printf "  ${border_color}┌"
+        printf '─%.0s' $(seq 1 $width)
+        printf "┐${RST}\n"
+        while IFS= read -r line; do
+            local stripped
+            stripped=$(printf '%s' "$line" | sed 's/\x1b\[[0-9;]*m//g')
+            local len=${#stripped}
+            local pad=$((width - len))
+            printf "  ${border_color}│${RST} %s%*s${border_color}│${RST}\n" "$line" "$pad" ""
+        done <<< "$content"
+        printf "  ${border_color}└"
+        printf '─%.0s' $(seq 1 $width)
+        printf "┘${RST}\n"
+    fi
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -266,79 +373,104 @@ select_from_list() {
     shift
     local items=("$@")
     local count=${#items[@]}
-    local current=0
 
-    # Determine input source for key reading
-    local input_fd=0
-    if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
-        exec 4</dev/tty
-        input_fd=4
-    fi
+    if [[ -n "$GUM" ]]; then
+        # Strip ANSI from items for gum (it does its own styling)
+        local clean_items=()
+        for item in "${items[@]}"; do
+            clean_items+=("$(printf '%s' "$item" | sed 's/\x1b\[[0-9;]*m//g')")
+        done
 
-    # Hide cursor
-    printf "\e[?25l"
+        local chosen
+        chosen=$($GUM choose --cursor "▸ " \
+            --cursor.foreground 196 \
+            --selected.foreground 196 --selected.bold \
+            --header "$prompt" --header.foreground 252 \
+            "${clean_items[@]}" < /dev/tty 2>/dev/tty) || true
 
-    # Draw initial list
-    printf "  %s\n\n" "$prompt"
-    for i in "${!items[@]}"; do
-        if [[ $i -eq $current ]]; then
-            printf "  ${BRED}${BOLD} ▸ %s${RST}\n" "${items[$i]}"
-        else
-            printf "    %s\n" "${items[$i]}"
-        fi
-    done
-
-    while true; do
-        # Read a single character
-        local key=""
-        IFS= read -rsn1 key <&"$input_fd"
-
-        if [[ "$key" == $'\x1b' ]]; then
-            # Escape sequence — read next two chars
-            local seq1="" seq2=""
-            IFS= read -rsn1 -t 0.1 seq1 <&"$input_fd" || true
-            IFS= read -rsn1 -t 0.1 seq2 <&"$input_fd" || true
-            if [[ "$seq1" == "[" ]]; then
-                case "$seq2" in
-                    A) # Up arrow
-                        current=$(( (current - 1 + count) % count ))
-                        ;;
-                    B) # Down arrow
-                        current=$(( (current + 1) % count ))
-                        ;;
-                esac
+        # Map chosen text back to 1-based index
+        SELECT_RESULT=1
+        for i in "${!clean_items[@]}"; do
+            if [[ "${clean_items[$i]}" == "$chosen" ]]; then
+                SELECT_RESULT=$((i + 1))
+                break
             fi
-        elif [[ "$key" == $'\t' ]]; then
-            # Tab — move down
-            current=$(( (current + 1) % count ))
-        elif [[ "$key" == "" ]]; then
-            # Enter — confirm selection
-            break
+        done
+    else
+        local current=0
+
+        # Determine input source for key reading
+        local input_fd=0
+        if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
+            exec 4</dev/tty
+            input_fd=4
         fi
 
-        # Redraw: move cursor up by count lines and overwrite
-        printf "\e[%dA" "$count"
+        # Hide cursor
+        printf "\e[?25l"
+
+        # Draw initial list
+        printf "  %s\n\n" "$prompt"
         for i in "${!items[@]}"; do
-            # Clear line and redraw
-            printf "\e[2K"
             if [[ $i -eq $current ]]; then
                 printf "  ${BRED}${BOLD} ▸ %s${RST}\n" "${items[$i]}"
             else
                 printf "    %s\n" "${items[$i]}"
             fi
         done
-    done
 
-    # Show cursor again
-    printf "\e[?25l\e[?25h"
-    printf "\n"
+        while true; do
+            # Read a single character
+            local key=""
+            IFS= read -rsn1 key <&"$input_fd"
 
-    # Close extra fd if we opened it
-    if [[ $input_fd -eq 4 ]]; then
-        exec 4<&-
+            if [[ "$key" == $'\x1b' ]]; then
+                # Escape sequence — read next two chars
+                local seq1="" seq2=""
+                IFS= read -rsn1 -t 0.1 seq1 <&"$input_fd" || true
+                IFS= read -rsn1 -t 0.1 seq2 <&"$input_fd" || true
+                if [[ "$seq1" == "[" ]]; then
+                    case "$seq2" in
+                        A) # Up arrow
+                            current=$(( (current - 1 + count) % count ))
+                            ;;
+                        B) # Down arrow
+                            current=$(( (current + 1) % count ))
+                            ;;
+                    esac
+                fi
+            elif [[ "$key" == $'\t' ]]; then
+                # Tab — move down
+                current=$(( (current + 1) % count ))
+            elif [[ "$key" == "" ]]; then
+                # Enter — confirm selection
+                break
+            fi
+
+            # Redraw: move cursor up by count lines and overwrite
+            printf "\e[%dA" "$count"
+            for i in "${!items[@]}"; do
+                # Clear line and redraw
+                printf "\e[2K"
+                if [[ $i -eq $current ]]; then
+                    printf "  ${BRED}${BOLD} ▸ %s${RST}\n" "${items[$i]}"
+                else
+                    printf "    %s\n" "${items[$i]}"
+                fi
+            done
+        done
+
+        # Show cursor again
+        printf "\e[?25l\e[?25h"
+        printf "\n"
+
+        # Close extra fd if we opened it
+        if [[ $input_fd -eq 4 ]]; then
+            exec 4<&-
+        fi
+
+        SELECT_RESULT=$((current + 1))
     fi
-
-    SELECT_RESULT=$((current + 1))
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -352,69 +484,57 @@ multi_select_from_list() {
     shift
     local items=("$@")
     local count=${#items[@]}
-    local current=0
-    local selected=()
 
-    # Initialize all as unselected
-    for ((i=0; i<count; i++)); do
-        selected[$i]=0
-    done
+    if [[ -n "$GUM" ]]; then
+        # Strip ANSI from items for gum
+        local clean_items=()
+        for item in "${items[@]}"; do
+            clean_items+=("$(printf '%s' "$item" | sed 's/\x1b\[[0-9;]*m//g')")
+        done
 
-    # Determine input source
-    local input_fd=0
-    if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
-        exec 4</dev/tty
-        input_fd=4
-    fi
+        local chosen
+        chosen=$($GUM choose --no-limit --cursor "▸ " \
+            --cursor.foreground 196 \
+            --selected.foreground 196 --selected.bold \
+            --header "$prompt" --header.foreground 252 \
+            "${clean_items[@]}" < /dev/tty 2>/dev/tty) || true
 
-    printf "\e[?25l"
+        # Map chosen lines back to comma-separated 1-based indices
+        MULTI_SELECT_RESULT=""
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            for i in "${!clean_items[@]}"; do
+                if [[ "${clean_items[$i]}" == "$line" ]]; then
+                    [[ -n "$MULTI_SELECT_RESULT" ]] && MULTI_SELECT_RESULT+=","
+                    MULTI_SELECT_RESULT+="$((i + 1))"
+                    break
+                fi
+            done
+        done <<< "$chosen"
+    else
+        local current=0
+        local selected=()
 
-    printf "  %s\n"  "$prompt"
-    dimtext "Use ↑↓ to navigate, Space to toggle, Enter to confirm"
-    printf "\n"
+        # Initialize all as unselected
+        for ((i=0; i<count; i++)); do
+            selected[$i]=0
+        done
 
-    # Draw initial list
-    for i in "${!items[@]}"; do
-        local marker="  "
-        [[ "${selected[$i]}" -eq 1 ]] && marker="${GRN}✓${RST} "
-        if [[ $i -eq $current ]]; then
-            printf "  ${BRED}${BOLD} ▸ ${RST}${marker}%s${RST}\n" "${items[$i]}"
-        else
-            printf "    ${marker}%s\n" "${items[$i]}"
-        fi
-    done
-
-    while true; do
-        local key=""
-        IFS= read -rsn1 key <&"$input_fd"
-
-        if [[ "$key" == $'\x1b' ]]; then
-            local seq1="" seq2=""
-            IFS= read -rsn1 -t 0.1 seq1 <&"$input_fd" || true
-            IFS= read -rsn1 -t 0.1 seq2 <&"$input_fd" || true
-            if [[ "$seq1" == "[" ]]; then
-                case "$seq2" in
-                    A) current=$(( (current - 1 + count) % count )) ;;
-                    B) current=$(( (current + 1) % count )) ;;
-                esac
-            fi
-        elif [[ "$key" == $'\t' ]]; then
-            current=$(( (current + 1) % count ))
-        elif [[ "$key" == " " ]]; then
-            # Toggle selection
-            if [[ "${selected[$current]}" -eq 1 ]]; then
-                selected[$current]=0
-            else
-                selected[$current]=1
-            fi
-        elif [[ "$key" == "" ]]; then
-            break
+        # Determine input source
+        local input_fd=0
+        if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
+            exec 4</dev/tty
+            input_fd=4
         fi
 
-        # Redraw
-        printf "\e[%dA" "$count"
+        printf "\e[?25l"
+
+        printf "  %s\n"  "$prompt"
+        dimtext "Use ↑↓ to navigate, Space to toggle, Enter to confirm"
+        printf "\n"
+
+        # Draw initial list
         for i in "${!items[@]}"; do
-            printf "\e[2K"
             local marker="  "
             [[ "${selected[$i]}" -eq 1 ]] && marker="${GRN}✓${RST} "
             if [[ $i -eq $current ]]; then
@@ -423,24 +543,65 @@ multi_select_from_list() {
                 printf "    ${marker}%s\n" "${items[$i]}"
             fi
         done
-    done
 
-    printf "\e[?25h"
-    printf "\n"
+        while true; do
+            local key=""
+            IFS= read -rsn1 key <&"$input_fd"
 
-    if [[ $input_fd -eq 4 ]]; then
-        exec 4<&-
-    fi
+            if [[ "$key" == $'\x1b' ]]; then
+                local seq1="" seq2=""
+                IFS= read -rsn1 -t 0.1 seq1 <&"$input_fd" || true
+                IFS= read -rsn1 -t 0.1 seq2 <&"$input_fd" || true
+                if [[ "$seq1" == "[" ]]; then
+                    case "$seq2" in
+                        A) current=$(( (current - 1 + count) % count )) ;;
+                        B) current=$(( (current + 1) % count )) ;;
+                    esac
+                fi
+            elif [[ "$key" == $'\t' ]]; then
+                current=$(( (current + 1) % count ))
+            elif [[ "$key" == " " ]]; then
+                # Toggle selection
+                if [[ "${selected[$current]}" -eq 1 ]]; then
+                    selected[$current]=0
+                else
+                    selected[$current]=1
+                fi
+            elif [[ "$key" == "" ]]; then
+                break
+            fi
 
-    # Build result
-    local result=""
-    for ((i=0; i<count; i++)); do
-        if [[ "${selected[$i]}" -eq 1 ]]; then
-            [[ -n "$result" ]] && result+=","
-            result+="$((i + 1))"
+            # Redraw
+            printf "\e[%dA" "$count"
+            for i in "${!items[@]}"; do
+                printf "\e[2K"
+                local marker="  "
+                [[ "${selected[$i]}" -eq 1 ]] && marker="${GRN}✓${RST} "
+                if [[ $i -eq $current ]]; then
+                    printf "  ${BRED}${BOLD} ▸ ${RST}${marker}%s${RST}\n" "${items[$i]}"
+                else
+                    printf "    ${marker}%s\n" "${items[$i]}"
+                fi
+            done
+        done
+
+        printf "\e[?25h"
+        printf "\n"
+
+        if [[ $input_fd -eq 4 ]]; then
+            exec 4<&-
         fi
-    done
-    MULTI_SELECT_RESULT="$result"
+
+        # Build result
+        local result=""
+        for ((i=0; i<count; i++)); do
+            if [[ "${selected[$i]}" -eq 1 ]]; then
+                [[ -n "$result" ]] && result+=","
+                result+="$((i + 1))"
+            fi
+        done
+        MULTI_SELECT_RESULT="$result"
+    fi
 }
 
 # ╔══════════════════════════════════════════════════════════╗
@@ -448,22 +609,38 @@ multi_select_from_list() {
 # ╚══════════════════════════════════════════════════════════╝
 clear 2>/dev/null || true
 printf "\n"
-printf "  ${BRED}${BOLD}"
-cat << 'ASCII'
+
+if [[ -n "$GUM" ]]; then
+    $GUM style --foreground 196 --bold --margin "0 2" \
+        '   ____         _                    ' \
+        '  | __ )  _ __ (_)__   __ ___  _ __  ' \
+        '  |  _ \ |'"'"'__|| |\ \ / // _ \| '"'"'_ \ ' \
+        '  | |_) || |   | | \ V /|  __/| | | |' \
+        '  |____/ |_|   |_|  \_/  \___||_| |_|'
+    printf "\n"
+    $GUM style --border rounded --border-foreground 196 \
+        --padding "1 2" --margin "0 2" --bold \
+        "Briven — Zero-Trust AI Agent Framework" \
+        "Self-hosted · Memory-persistent · /atlas-governed" \
+        "" \
+        "Installer v2.1    github.com/flandriendev/briven"
+else
+    printf "  ${BRED}${BOLD}"
+    cat << 'ASCII'
    ____         _
   | __ )  _ __ (_)__   __ ___  _ __
   |  _ \ | '__|| |\ \ / // _ \| '_ \
   | |_) || |   | | \ V /|  __/| | | |
   |____/ |_|   |_|  \_/  \___||_| |_|
 ASCII
-printf "${RST}\n"
-
-draw_box << EOF
+    printf "${RST}\n"
+    draw_box << EOF
 ${BRED}${BOLD}Briven — Zero-Trust AI Agent Framework${RST}
 ${DIM}Self-hosted · Memory-persistent · /atlas-governed${RST}
 
 ${BOLD}Installer v2.1${RST}        ${DIM}github.com/flandriendev/briven${RST}
 EOF
+fi
 
 printf "\n"
 
@@ -497,15 +674,26 @@ ${DIM}Review the source: github.com/flandriendev/briven${RST}
 EOF
 
 printf "\n"
-select_from_list "  I understand and accept the above. Continue?" \
-    "Yes — continue with installation" \
-    "No  — cancel and exit"
-
-if [[ "$SELECT_RESULT" -eq 2 ]]; then
-    printf "\n"
-    info "Installation cancelled. No changes were made."
-    printf "\n"
-    exit 0
+if [[ -n "$GUM" ]]; then
+    if ! $GUM confirm "I understand and accept the above. Continue?" \
+        --affirmative "Yes — continue" --negative "No — cancel" \
+        --prompt.foreground 252 \
+        < /dev/tty 2>/dev/tty; then
+        printf "\n"
+        info "Installation cancelled. No changes were made."
+        printf "\n"
+        exit 0
+    fi
+else
+    select_from_list "  I understand and accept the above. Continue?" \
+        "Yes — continue with installation" \
+        "No  — cancel and exit"
+    if [[ "$SELECT_RESULT" -eq 2 ]]; then
+        printf "\n"
+        info "Installation cancelled. No changes were made."
+        printf "\n"
+        exit 0
+    fi
 fi
 
 # ── Detect distro / platform ──────────────────────────────
