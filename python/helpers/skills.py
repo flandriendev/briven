@@ -30,6 +30,7 @@ class Skill:
     allowed_tools: List[str] = field(default_factory=list)
     license: str = ""
     compatibility: str = ""
+    model: str = ""  # optional preferred model (e.g. "openai/gpt-4o")
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     # Optional heavy fields (only set when requested)
@@ -262,6 +263,7 @@ def skill_from_markdown(
     author = str(fm.get("author") or "").strip()
     license_ = str(fm.get("license") or "").strip()
     compatibility = str(fm.get("compatibility") or "").strip()
+    model = str(fm.get("model") or fm.get("preferred_model") or "").strip()
 
     meta = fm.get("metadata")
     if not isinstance(meta, dict):
@@ -278,6 +280,7 @@ def skill_from_markdown(
         triggers=triggers,
         allowed_tools=allowed_tools,
         license=license_,
+        model=model,
         metadata=dict(meta),
         compatibility=compatibility,
         raw_frontmatter=fm if include_content else {},

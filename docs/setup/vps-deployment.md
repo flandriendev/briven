@@ -529,6 +529,30 @@ docker exec briven-instance cat /briven/.env
 docker restart briven-instance
 ```
 
+### Issue: 404 Not Found
+
+**Cause:** The reverse proxy is not configured, so the web server (Apache/Nginx) serves its default document root instead of forwarding to the Briven container. This is the most common issue on shared hosting providers like Hostinger.
+
+**Fix:**
+```bash
+# 1. Verify the container is running and responding locally
+curl -I http://127.0.0.1:50080/
+# Expected: HTTP/1.1 302 FOUND with Location: /login
+
+# 2. If local access works, the issue is the reverse proxy.
+#    Follow Section 4 (Apache Reverse Proxy Configuration) above.
+
+# 3. After creating the Apache config, test and reload:
+httpd -t          # or apache2ctl -t
+systemctl reload httpd   # or systemctl reload apache2
+
+# 4. Verify external access
+curl -I https://your-domain.com/
+# Expected: HTTP/2 302 with Location: /login
+```
+
+> **Hostinger-specific:** Hostinger VPS uses Apache by default. Create the reverse proxy config in `/etc/httpd/conf.d/` or `/etc/apache2/sites-available/` and ensure `mod_proxy`, `mod_proxy_http`, and `mod_proxy_wstunnel` are enabled. If Hostinger's control panel manages Apache configs, you may need to use a custom includes file that loads before the panel's default vhosts.
+
 ### Issue: 403 Forbidden
 
 **Cause:** DirectAdmin vhost overriding custom proxy config

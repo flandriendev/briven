@@ -46,7 +46,23 @@ Use the model rate limit fields in Settings (Chat/Utility/Browser model sections
 **13. Can Briven interact with external APIs or services (e.g., WhatsApp)?**
 Yes, by creating custom tools or using MCP servers. See [Extensions](../developer/extensions.md) and [MCP Setup](mcp-setup.md).
 
+**14. How do I set up my business context?**
+Say "set up my business" in chat to run the business-setup wizard. It walks you through a questionnaire and writes your business profile and voice guide to `usr/context/my-business.md` and `usr/context/my-voice.md`. You can also edit these files manually. See [Productivity Features](usage.md#productivity-features).
+
+**15. Where are daily session logs stored?**
+Daily logs are automatically saved to `usr/logs/YYYY-MM-DD.md`. Each entry includes a timestamp and session summary. Use the **weekly-review** skill ("weekly review" in chat) to get a structured analysis of your past 7 days.
+
 ## Troubleshooting
+
+**Telegram Pairing**
+
+- **Bot not receiving messages:** Telegram's `getUpdates` is a single-consumer API. If another client (e.g., a test script or another bot instance) is polling, Briven won't receive updates. Stop all other consumers first.
+- **Webhook blocking polling:** If a webhook was previously set via `setWebhook`, `getUpdates` will return nothing even with Briven stopped. Delete the webhook first:
+  ```bash
+  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteWebhook"
+  ```
+- **Pairing code not detected:** The pairing match is case-insensitive, but typos will cause it to fail. Copy-paste the exact code shown by the installer.
+- **Bot is in a group, not private chat:** Group chat IDs are negative numbers. If Briven expects a private chat ID, a group ID may fail silently. Send the pairing code in a direct message to the bot.
 
 **Installation**
 - **Docker Issues:** If Docker containers fail to start, consult the Docker documentation and verify your Docker installation and configuration.  On macOS, ensure you've granted Docker access to your project files in Docker Desktop's settings as described in the [Installation guide](../setup/installation.md#4-install-docker-docker-desktop-application). Verify that the Docker image is updated.

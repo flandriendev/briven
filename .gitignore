@@ -35,6 +35,13 @@ usr/**
 # Global rule to include .gitkeep files anywhere
 !**/.gitkeep
 
+# Bundled user templates (shipped with repo)
+!usr/.env.example
+!usr/context/my-business.md
+!usr/context/my-voice.md
+!usr/skills/business-setup/SKILL.md
+!usr/skills/weekly-review/SKILL.md
+
 # for browser-use
 agent_history.gif
 

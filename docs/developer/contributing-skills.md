@@ -144,6 +144,7 @@ More instructions...
 | `tags` | Categories for discovery |
 | `triggers` | Phrases that activate this skill |
 | `allowed_tools` | Tools this skill can use |
+| `model` | Preferred LLM for this skill (e.g., `openai/gpt-4o`). Alias: `preferred_model` |
 | `metadata` | Additional structured data |
 
 ---
@@ -389,6 +390,18 @@ my-skills-collection/
 ### Q: Can skills call other skills?
 
 **A:** Skills don't directly call each other, but the agent may combine multiple skills when appropriate for a task.
+
+### Q: What bundled skills come with Briven?
+
+**A:** Briven ships with two productivity skills in `usr/skills/`:
+- **business-setup** — Conversational wizard that configures your business identity, voice, and goals. Say "set up my business" to start.
+- **weekly-review** — Structured weekly review that analyzes your daily session logs and plans the next week. Say "weekly review" to start.
+
+These serve as good reference examples for creating your own skills.
+
+### Q: What is the `model` frontmatter field?
+
+**A:** The optional `model` field lets a skill request a specific LLM. For example, a coding skill could specify `model: "anthropic/claude-sonnet-4-6"` to use a code-optimized model. The alias `preferred_model` also works.
 
 ---
 

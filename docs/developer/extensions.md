@@ -22,10 +22,23 @@ Briven provides several extension points where custom code can be injected:
 - **message_loop_prompts_after**: Executed after prompts are processed in the message loop
 - **message_loop_end**: Executed at the end of the message processing loop
 - **monologue_start**: Executed at the start of agent monologue
-- **monologue_end**: Executed at the end of agent monologue
+- **monologue_end**: Executed at the end of agent monologue (e.g., daily session logging)
 - **reasoning_stream**: Executed when reasoning stream data is received
+- **reasoning_stream_chunk**: Executed for each reasoning stream chunk
+- **reasoning_stream_end**: Executed when reasoning stream ends
 - **response_stream**: Executed when response stream data is received
-- **system_prompt**: Executed when system prompts are processed
+- **response_stream_chunk**: Executed for each response stream chunk
+- **response_stream_end**: Executed when response stream ends
+- **system_prompt**: Executed when system prompts are processed (e.g., business context injection)
+- **tool_execute_before**: Executed before a tool runs (e.g., guardrail safety checks, secret unmasking)
+- **tool_execute_after**: Executed after a tool completes
+- **process_chain_end**: Executed at the end of the process chain
+- **hist_add_before**: Executed before adding a message to history
+- **hist_add_tool_result**: Executed when a tool result is added to history
+- **error_format**: Executed when formatting error messages
+- **util_model_call_before**: Executed before a utility model call
+- **user_message_ui**: Executed for user message UI processing
+- **banners**: Executed for banner messages
 
 #### Extension Mechanism
 The extension mechanism in Briven works through the `call_extensions` function in `agent.py`, which:
@@ -55,6 +68,23 @@ class ExampleExtension(Extension):
         # rename the agent to SuperBriven
         self.agent.agent_name = "SuperAgent" + str(self.agent.number)
 ```
+
+#### Built-in Extensions
+
+Briven ships with several built-in extensions:
+
+| Extension Point | File | Purpose |
+|---|---|---|
+| `tool_execute_before` | `_10_replace_last_tool_output.py` | Replaces `{last_tool_output}` placeholders in tool arguments |
+| `tool_execute_before` | `_10_unmask_secrets.py` | Unmasks secret placeholders for actual tool execution |
+| `tool_execute_before` | `_20_guardrails.py` | Blocks dangerous commands (e.g., `rm -rf /`, `git push --force`, `DROP TABLE`) before execution |
+| `system_prompt` | `_10_system_prompt.py` | Builds the main system prompt (tools, skills, secrets, projects) |
+| `system_prompt` | `_20_behaviour_prompt.py` | Injects custom behaviour rules |
+| `system_prompt` | `_30_business_context.py` | Injects business identity and voice from `usr/context/` files |
+| `monologue_end` | `_20_daily_log.py` | Appends session summaries to daily log files at `usr/logs/` |
+
+> [!TIP]
+> Extensions can be disabled via **Settings → Disabled Extensions** (comma-separated filenames without `.py`). For example: `_20_guardrails,_20_daily_log`
 
 #### Extension Override Logic
 When an extension with the same filename exists in both the default location and an agent-specific location, the agent-specific version takes precedence. This allows for selective overriding of extensions while inheriting the rest of the default behavior.

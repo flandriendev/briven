@@ -1103,3 +1103,48 @@ Sharing Briven configurations:
 
 > [!TIP]
 > The backup system is designed to work across different operating systems and Briven installations. Your backups from a Windows system will work on Linux, and vice versa.
+
+---
+
+## Productivity Features
+
+Briven includes built-in productivity features that help you stay organized and build a personalized AI assistant.
+
+### Business Context
+
+Briven can learn about your business and communication style to provide more relevant, on-brand responses.
+
+Two files in `usr/context/` control this:
+
+- **`my-business.md`** — Your business profile (what you do, who your customers are, your main offer, lead sources, current challenges)
+- **`my-voice.md`** — Your communication style (tone, characteristic phrases, what to avoid)
+
+**Getting started:** Say "set up my business" in chat to run the **business-setup** wizard, which walks you through a conversational questionnaire and auto-generates both files. You can also edit them manually.
+
+Once configured, the business context is automatically injected into the agent's system prompt so every response reflects your business identity.
+
+### Daily Session Logs
+
+Briven automatically logs a summary of each session to daily log files at `usr/logs/YYYY-MM-DD.md`. Each entry includes the timestamp, user message, and response summary.
+
+These logs accumulate over time and serve as an activity journal. They are used by the **weekly-review** skill to generate structured reviews.
+
+> [!TIP]
+> Daily logging is handled by the `_20_daily_log` extension and can be disabled in **Settings → Disabled Extensions** if not needed.
+
+### Weekly Review
+
+Say "weekly review" in chat to trigger a structured review of the past 7 days. The review covers:
+
+- What happened this week (from daily logs)
+- What got done and what didn't
+- Patterns and insights
+- Next week's priorities
+
+This is powered by the **weekly-review** skill, which reads your daily logs from `usr/logs/` and optionally references your business context for goal tracking.
+
+### Guardrails
+
+Briven includes a built-in safety guardrail that blocks dangerous commands before they execute. Commands like `rm -rf /`, `git push --force`, `DROP TABLE`, and similar destructive operations are intercepted, and the agent is instructed to ask for your explicit confirmation before retrying.
+
+The guardrail runs as a `tool_execute_before` extension and can be disabled in **Settings → Disabled Extensions** if needed.

@@ -5,6 +5,11 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 #
+# To review before running (recommended — this script gets root-level access):
+#   curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh -o install.sh
+#   less install.sh
+#   bash install.sh
+#
 # Supported:
 #   Ubuntu 22.04 / 24.04 · Debian 12 / 13
 #
@@ -348,6 +353,7 @@ EOF
             continue
         fi
 
+        # --accept-dns=false prevents Tailscale from overriding the VPS's DNS resolvers
         if sudo tailscale up --authkey="$KEY" --accept-routes --accept-dns=false 2>/dev/null; then
             sleep 2
             VERIFY=$(tailscale status --json 2>/dev/null || echo '{}')
@@ -384,9 +390,13 @@ step "Environment configuration"
 for d in . usr; do
     if [[ -f "$d/.env.example" && ! -f "$d/.env" ]]; then
         cp "$d/.env.example" "$d/.env"
-        ok "Created $d/.env from template"
+        chmod 600 "$d/.env"
+        ok "Created $d/.env from template (permissions: 600)"
     fi
 done
+# Ensure .env files are owner-only even on re-runs
+chmod 600 "$INSTALL_DIR/usr/.env" 2>/dev/null || true
+chmod 600 "$INSTALL_DIR/.env" 2>/dev/null || true
 ok "Environment files ready"
 
 # ╔══════════════════════════════════════════════════════════╗
@@ -561,6 +571,7 @@ if [[ -n "$CH_SELECTION" ]]; then
                 ;;
             2)
                 info "WhatsApp Business setup"
+                dimtext "Requires a Meta Business account + phone number verification"
                 dimtext "Get from: developers.facebook.com → WhatsApp → API Setup"
                 val=$(ask "  WhatsApp token: ")
                 [[ -n "$val" ]] && set_env "WHATSAPP_TOKEN" "$val" && ok "WhatsApp token saved"
@@ -585,6 +596,8 @@ if [[ -n "$CH_SELECTION" ]]; then
                 ;;
             5)
                 info "Email (SMTP) setup"
+                dimtext "Gmail users: enable 2FA first, then create an App Password"
+                dimtext "at https://myaccount.google.com/apppasswords"
                 val=$(ask "  SMTP host (smtp.gmail.com): ")
                 [[ -n "$val" ]] && set_env "EMAIL_SMTP_HOST" "$val"
                 val=$(ask "  SMTP port (587): ")
@@ -791,6 +804,14 @@ The service may still be initializing.
   ${BRED}${BOLD}Web UI:${RST}        http://$TS_IP:$BRIVEN_PORT
   ${BRED}${BOLD}Status:${RST}        ${YEL}starting...${RST}
 EOF
+fi
+
+# ── Post-install checks ────────────────────────────────────
+CHANNELS_CONFIGURED=$(grep -cE "^(TELEGRAM_|DISCORD_|SLACK_|WHATSAPP_|EMAIL_)" "$INSTALL_DIR/usr/.env" 2>/dev/null || echo "0")
+if [[ "$CHANNELS_CONFIGURED" -gt 0 ]]; then
+    ok "$CHANNELS_CONFIGURED messaging channel variable(s) configured"
+else
+    warn "No messaging channels configured — Web UI only. Add channels later in usr/.env"
 fi
 
 printf "\n"
