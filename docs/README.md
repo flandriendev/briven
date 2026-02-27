@@ -132,6 +132,12 @@ The TUI installer handles everything: dependencies, Python venv, GPU detection, 
 
 ---
 
+## Disclaimer
+
+Briven is a self-hosted AI agent framework that can execute shell commands, read/write files, access the internet, and interact with connected services. **You are solely responsible for how you deploy and configure Briven on your infrastructure.** Briven and its contributors accept no liability for any damage, data loss, security breach, or other issue arising from its use. Always use authentication, keep your instance behind Tailscale or TLS, and follow the security best practices in the [Installation Guide](setup/installation.md).
+
+---
+
 ### Your journey with Briven starts now
 
 Ready to dive in? Start with the [Quickstart Guide](quickstart.md) for the fastest path to your first chat, or follow the [Installation Guide](setup/installation.md) for a detailed setup walkthrough.

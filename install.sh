@@ -467,24 +467,46 @@ EOF
 
 printf "\n"
 
-# ── Security notice ────────────────────────────────────────
+# ── Security & Disclaimer ─────────────────────────────────
 draw_box << EOF
-${YEL}${BOLD}⚠  Security Notice${RST}
+${YEL}${BOLD}⚠  Security & Disclaimer — please read.${RST}
 
-${WHT}This script will:${RST}
-  • Install system packages (git, python3, build tools)
-  • Clone the Briven repository
-  • Create a Python virtual environment
-  • Optionally install Tailscale (VPS/server)
-  • Optionally configure firewall (Linux VPS)
-  • Create a system service (Linux) or start script
+${WHT}Briven is a self-hosted AI agent framework. It can:${RST}
+  • Execute shell commands and read/write files
+  • Access the internet, APIs, and connected services
+  • Run autonomous tasks if tools are enabled
+
+${WHT}A bad prompt or misconfiguration can lead to${RST}
+${WHT}unintended actions on your system.${RST}
+
+${BOLD}By continuing, you acknowledge that:${RST}
+  • You are solely responsible for how you deploy
+    and configure Briven on your infrastructure
+  • Briven and its contributors accept no liability
+    for any damage, data loss, security breach, or
+    other issue arising from its use
+  • You will follow security best practices:
+    – Use authentication (AUTH_LOGIN / AUTH_PASSWORD)
+    – Do not expose the web UI to the public internet
+      without Tailscale or a reverse proxy with TLS
+    – Keep secrets out of the agent's reachable paths
+    – Use the strongest available model for any bot
+      with tools or untrusted inboxes
 
 ${DIM}Review the source: github.com/flandriendev/briven${RST}
-${DIM}Press Ctrl+C at any time to abort.${RST}
 EOF
 
 printf "\n"
-REPLY=$(ask "  Press Enter to continue or Ctrl+C to abort... ")
+select_from_list "  I understand and accept the above. Continue?" \
+    "Yes — continue with installation" \
+    "No  — cancel and exit"
+
+if [[ "$SELECT_RESULT" -eq 2 ]]; then
+    printf "\n"
+    info "Installation cancelled. No changes were made."
+    printf "\n"
+    exit 0
+fi
 
 # ── Detect distro / platform ──────────────────────────────
 DISTRO=""

@@ -582,6 +582,9 @@ Briven includes a cross-platform interactive installer that runs natively — no
 curl -fsSL https://raw.githubusercontent.com/flandriendev/briven/main/install.sh | bash
 ```
 
+> [!IMPORTANT]
+> **Disclaimer:** The installer will ask you to accept a security disclaimer before proceeding. Briven is a powerful AI agent framework that can execute commands, read/write files, and access external services. You are solely responsible for how you deploy and configure Briven. Briven and its contributors accept no liability for any damage, data loss, or security issues arising from its use. Always follow the security best practices outlined in the installer and documentation.
+
 The installer provides a full TUI with arrow-key navigation and guides you through 10 steps:
 
 1. **System dependencies** — auto-detects your OS and installs via the appropriate package manager (apt, brew, dnf, pacman, zypper)
