@@ -11,15 +11,18 @@
 #   bash install.sh
 #
 # Supported:
-#   Ubuntu 22.04 / 24.04 · Debian 12 / 13
+#   Linux:   Ubuntu 22.04/24.04, Debian 12/13, Fedora, Arch, etc.
+#   macOS:   Apple Silicon & Intel (via Homebrew)
+#   Windows: WSL2 (Ubuntu/Debian inside WSL)
 #
 # Features:
 #   - Visual TUI with colored output and progress tracking
 #   - Arrow-key navigable selection lists for providers & channels
 #   - Guided LLM provider selection (cloud + free local: Ollama, LM Studio)
 #   - Channel integration setup (Telegram, WhatsApp, Discord, Slack, Email)
-#   - Tailscale zero-trust networking + ACL enforcement
-#   - UFW + Fail2ban hardening (optional)
+#   - Tailscale zero-trust networking + ACL enforcement (VPS)
+#   - UFW + Fail2ban hardening (Linux VPS, optional)
+#   - Systemd service (Linux) / manual start (macOS/WSL)
 #   - Python 3.13+ compatibility auto-patching
 #   - Idempotent: safe to re-run at any time
 # ============================================================
@@ -29,6 +32,25 @@ REPO="https://github.com/flandriendev/briven.git"
 BRIVEN_PORT="${BRIVEN_PORT:-8000}"
 TOTAL_STEPS=10
 CURRENT_STEP=0
+
+# ── Early OS detection (needed by sedi and other helpers) ──
+OS_TYPE=""
+case "$(uname -s)" in
+    Darwin)  OS_TYPE="macOS" ;;
+    Linux)
+        if grep -qi "microsoft\|wsl" /proc/version 2>/dev/null; then
+            OS_TYPE="WSL"
+        else
+            OS_TYPE="Linux"
+        fi
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        OS_TYPE="Windows"
+        ;;
+    *)
+        OS_TYPE="Linux"  # Best guess
+        ;;
+esac
 
 # ── Colors (ANSI-C quoting for proper rendering in heredocs) ──
 # Briven red: RGB 221,63,42 / #dd3f2a
@@ -100,14 +122,23 @@ ask_secret() {
     printf '%s' "$val"
 }
 
+# ── Cross-platform sed -i (macOS requires '' argument) ─────
+sedi() {
+    if [[ "$OS_TYPE" == "macOS" ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
 # ── Write key to usr/.env (uncomment if commented, append if missing)
 set_env() {
     local key="$1" val="$2" file="$INSTALL_DIR/usr/.env"
     [[ -z "$val" ]] && return
     if grep -q "^${key}=" "$file" 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+        sedi "s|^${key}=.*|${key}=${val}|" "$file"
     elif grep -q "^# *${key}=" "$file" 2>/dev/null; then
-        sed -i "s|^# *${key}=.*|${key}=${val}|" "$file"
+        sedi "s|^# *${key}=.*|${key}=${val}|" "$file"
     else
         printf '%s=%s\n' "$key" "$val" >> "$file"
     fi
@@ -444,9 +475,9 @@ ${WHT}This script will:${RST}
   • Install system packages (git, python3, build tools)
   • Clone the Briven repository
   • Create a Python virtual environment
-  • Install Tailscale for zero-trust networking
-  • Configure UFW firewall rules (optional)
-  • Create a systemd service
+  • Optionally install Tailscale (VPS/server)
+  • Optionally configure firewall (Linux VPS)
+  • Create a system service (Linux) or start script
 
 ${DIM}Review the source: github.com/flandriendev/briven${RST}
 ${DIM}Press Ctrl+C at any time to abort.${RST}
@@ -455,30 +486,86 @@ EOF
 printf "\n"
 REPLY=$(ask "  Press Enter to continue or Ctrl+C to abort... ")
 
-# ── Detect distro ──────────────────────────────────────────
+# ── Detect distro / platform ──────────────────────────────
 DISTRO=""
 DISTRO_VER=""
-if grep -qi "ubuntu" /etc/os-release 2>/dev/null; then
-    DISTRO="Ubuntu"
-    DISTRO_VER=$(grep VERSION_ID /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo "?")
-elif grep -qi "debian" /etc/os-release 2>/dev/null; then
-    DISTRO="Debian"
-    DISTRO_VER=$(grep VERSION_ID /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo "?")
-else
-    err "Unsupported distro. Requires Ubuntu 22.04/24.04 or Debian 12/13."
-fi
+PKG_MANAGER=""  # apt, brew, dnf, pacman, zypper
+
+case "$OS_TYPE" in
+    macOS)
+        DISTRO="macOS"
+        DISTRO_VER=$(sw_vers -productVersion 2>/dev/null || echo "?")
+        if command -v brew >/dev/null 2>&1; then
+            PKG_MANAGER="brew"
+        else
+            warn "Homebrew not found. Install it first: https://brew.sh"
+            err "Homebrew is required on macOS. Run: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        fi
+        ;;
+    WSL)
+        # WSL runs a Linux distro underneath
+        if grep -qi "ubuntu" /etc/os-release 2>/dev/null; then
+            DISTRO="Ubuntu (WSL)"
+        elif grep -qi "debian" /etc/os-release 2>/dev/null; then
+            DISTRO="Debian (WSL)"
+        else
+            DISTRO="Linux (WSL)"
+        fi
+        DISTRO_VER=$(grep VERSION_ID /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo "?")
+        PKG_MANAGER="apt"
+        ;;
+    Linux)
+        if grep -qi "ubuntu" /etc/os-release 2>/dev/null; then
+            DISTRO="Ubuntu"
+            PKG_MANAGER="apt"
+        elif grep -qi "debian" /etc/os-release 2>/dev/null; then
+            DISTRO="Debian"
+            PKG_MANAGER="apt"
+        elif grep -qi "fedora\|rhel\|centos\|rocky\|alma" /etc/os-release 2>/dev/null; then
+            DISTRO="Fedora/RHEL"
+            PKG_MANAGER="dnf"
+            command -v dnf >/dev/null 2>&1 || PKG_MANAGER="yum"
+        elif grep -qi "arch\|manjaro\|endeavour" /etc/os-release 2>/dev/null; then
+            DISTRO="Arch"
+            PKG_MANAGER="pacman"
+        elif grep -qi "opensuse\|suse" /etc/os-release 2>/dev/null; then
+            DISTRO="openSUSE"
+            PKG_MANAGER="zypper"
+        else
+            DISTRO="Linux"
+            # Try to detect package manager
+            if command -v apt-get >/dev/null 2>&1; then
+                PKG_MANAGER="apt"
+            elif command -v dnf >/dev/null 2>&1; then
+                PKG_MANAGER="dnf"
+            elif command -v pacman >/dev/null 2>&1; then
+                PKG_MANAGER="pacman"
+            elif command -v zypper >/dev/null 2>&1; then
+                PKG_MANAGER="zypper"
+            else
+                PKG_MANAGER="unknown"
+            fi
+        fi
+        DISTRO_VER=$(grep VERSION_ID /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo "?")
+        ;;
+esac
 
 # ── Detect user / install path ─────────────────────────────
 if [[ -n "${SUDO_USER:-}" && "${SUDO_USER:-}" != "root" ]]; then
     RUN_USER="$SUDO_USER"
-    RUN_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    if command -v getent >/dev/null 2>&1; then
+        RUN_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    else
+        RUN_HOME=$(eval echo "~$SUDO_USER")
+    fi
 else
-    RUN_USER="${USER:-root}"
+    RUN_USER="${USER:-$(whoami)}"
     RUN_HOME="$HOME"
 fi
 INSTALL_DIR="${BRIVEN_DIR:-$RUN_HOME/briven}"
 
-info "Detected: $DISTRO $DISTRO_VER"
+info "Detected: $DISTRO $DISTRO_VER ($OS_TYPE)"
+info "Package manager: $PKG_MANAGER"
 info "Install dir: $INSTALL_DIR (user: $RUN_USER)"
 
 # ╔══════════════════════════════════════════════════════════╗
@@ -486,17 +573,60 @@ info "Install dir: $INSTALL_DIR (user: $RUN_USER)"
 # ╚══════════════════════════════════════════════════════════╝
 step "System dependencies"
 
-info "Updating package lists..."
-sudo apt-get update -qq
-
-info "Installing base packages..."
-sudo apt-get install -y -qq \
-    git curl wget ca-certificates build-essential \
-    python3 python3-venv python3-dev python3-pip \
-    libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
-    libsqlite3-dev libncursesw5-dev libxml2-dev libxmlsec1-dev \
-    libffi-dev liblzma-dev jq ufw fail2ban \
-    tesseract-ocr poppler-utils 2>/dev/null || true
+case "$PKG_MANAGER" in
+    apt)
+        info "Updating package lists..."
+        sudo apt-get update -qq
+        info "Installing base packages..."
+        sudo apt-get install -y -qq \
+            git curl wget ca-certificates build-essential \
+            python3 python3-venv python3-dev python3-pip \
+            libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
+            libsqlite3-dev libncursesw5-dev libxml2-dev libxmlsec1-dev \
+            libffi-dev liblzma-dev jq \
+            tesseract-ocr poppler-utils 2>/dev/null || true
+        # UFW and Fail2ban only on non-WSL Linux (VPS/server use)
+        if [[ "$OS_TYPE" == "Linux" ]]; then
+            sudo apt-get install -y -qq ufw fail2ban 2>/dev/null || true
+        fi
+        ;;
+    brew)
+        info "Installing packages via Homebrew..."
+        brew install git curl wget python3 jq tesseract poppler 2>/dev/null || true
+        ;;
+    dnf|yum)
+        info "Installing packages via $PKG_MANAGER..."
+        sudo "$PKG_MANAGER" install -y \
+            git curl wget ca-certificates gcc gcc-c++ make \
+            python3 python3-devel python3-pip \
+            openssl-devel zlib-devel bzip2-devel readline-devel \
+            sqlite-devel ncurses-devel libxml2-devel libxmlsec1-devel \
+            libffi-devel xz-devel jq \
+            tesseract poppler-utils 2>/dev/null || true
+        ;;
+    pacman)
+        info "Installing packages via pacman..."
+        sudo pacman -Sy --noconfirm --needed \
+            git curl wget base-devel python python-pip \
+            openssl zlib bzip2 readline sqlite ncurses \
+            libxml2 libxmlsec libffi xz jq \
+            tesseract poppler 2>/dev/null || true
+        ;;
+    zypper)
+        info "Installing packages via zypper..."
+        sudo zypper install -y \
+            git curl wget gcc gcc-c++ make \
+            python3 python3-devel python3-pip \
+            libopenssl-devel zlib-devel libbz2-devel readline-devel \
+            sqlite3-devel ncurses-devel libxml2-devel libxmlsec1-devel \
+            libffi-devel xz-devel jq \
+            tesseract-ocr poppler-tools 2>/dev/null || true
+        ;;
+    *)
+        warn "Unknown package manager — skipping system dependency install"
+        dimtext "Make sure git, python3, curl, jq are installed manually"
+        ;;
+esac
 ok "Base packages ready"
 
 # ╔══════════════════════════════════════════════════════════╗
@@ -546,16 +676,21 @@ pip install --upgrade pip setuptools wheel --quiet
 # ── Python 3.13+ compatibility patches ────────────────────
 if [[ "$PY_MINOR" -ge 13 ]]; then
     info "Python 3.13+ detected — disabling incompatible packages..."
-    sed -i 's/^kokoro/#kokoro/' requirements.txt
-    sed -i 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
-    sed -i 's/^openai-whisper/#openai-whisper/' requirements.txt
+    sedi 's/^kokoro/#kokoro/' requirements.txt
+    sedi 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
+    sedi 's/^openai-whisper/#openai-whisper/' requirements.txt
     ok "Disabled: kokoro, langchain-unstructured, openai-whisper"
 fi
 
 # ── GPU detection — install PyTorch CPU-only if no GPU ────
 # NVIDIA CUDA packages are ~2GB+ and cause "No space left" on small VPS
+# macOS uses MPS (Metal) automatically — no CUDA bloat
 HAS_GPU=false
-if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+if [[ "$OS_TYPE" == "macOS" ]]; then
+    # macOS PyTorch uses MPS natively, no NVIDIA packages involved
+    info "macOS detected — PyTorch will use Metal (MPS) acceleration"
+    HAS_GPU=true  # Skip CPU-only install, default PyTorch is fine on macOS
+elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     HAS_GPU=true
     info "NVIDIA GPU detected — installing PyTorch with CUDA support"
 fi
@@ -581,10 +716,10 @@ if pip install --no-cache-dir -r requirements.txt 2>&1; then
     ok "Dependencies installed successfully"
 else
     warn "First attempt failed — retrying with reduced packages..."
-    sed -i 's/^kokoro/#kokoro/' requirements.txt
-    sed -i 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
-    sed -i 's/^openai-whisper/#openai-whisper/' requirements.txt
-    sed -i 's/^sentence-transformers/#sentence-transformers/' requirements.txt
+    sedi 's/^kokoro/#kokoro/' requirements.txt
+    sedi 's/^langchain-unstructured/#langchain-unstructured/' requirements.txt
+    sedi 's/^openai-whisper/#openai-whisper/' requirements.txt
+    sedi 's/^sentence-transformers/#sentence-transformers/' requirements.txt
     if pip install --no-cache-dir -r requirements.txt 2>&1; then
         ok "Dependencies installed (some optional packages disabled)"
     else
@@ -599,14 +734,52 @@ ok "All dependencies ready"
 # ╚══════════════════════════════════════════════════════════╝
 step "Tailscale zero-trust networking"
 
-if ! command -v tailscale >/dev/null 2>&1; then
-    info "Installing Tailscale..."
-    curl -fsSL https://tailscale.com/install.sh | sh
+# Tailscale is most relevant for VPS/server. On local machines it's optional.
+TAILSCALE_AVAILABLE=false
+
+if command -v tailscale >/dev/null 2>&1; then
+    TAILSCALE_AVAILABLE=true
+    ok "Tailscale already installed"
+else
+    case "$OS_TYPE" in
+        macOS)
+            dimtext "Tailscale is optional for local macOS installations."
+            dimtext "Install from: https://tailscale.com/download/mac"
+            dimtext "Or: brew install --cask tailscale"
+            printf "\n"
+            select_from_list "Install Tailscale?" \
+                "Yes — install via Homebrew" \
+                "Skip — I'll use localhost or install later"
+            if [[ "$SELECT_RESULT" -eq 1 ]]; then
+                brew install --cask tailscale 2>/dev/null || brew install tailscale 2>/dev/null || true
+                command -v tailscale >/dev/null 2>&1 && TAILSCALE_AVAILABLE=true
+            fi
+            ;;
+        WSL)
+            dimtext "Tailscale in WSL: install Tailscale on your Windows host instead."
+            dimtext "Download from: https://tailscale.com/download/windows"
+            dimtext "WSL will share the host's Tailscale connection."
+            ;;
+        Linux)
+            info "Installing Tailscale..."
+            curl -fsSL https://tailscale.com/install.sh | sh
+            command -v tailscale >/dev/null 2>&1 && TAILSCALE_AVAILABLE=true
+            ;;
+    esac
 fi
-sudo systemctl enable --now tailscaled 2>/dev/null || true
-ok "Tailscale daemon ready"
+
+# Start tailscaled daemon (Linux only — macOS uses the app)
+if $TAILSCALE_AVAILABLE && [[ "$OS_TYPE" == "Linux" ]]; then
+    sudo systemctl enable --now tailscaled 2>/dev/null || true
+    ok "Tailscale daemon ready"
+fi
 
 # ── Tailscale authentication ───────────────────────────────
+TS_OK=false
+TS_STATUS=""
+TS_BACKEND=""
+
+if $TAILSCALE_AVAILABLE; then
 TS_STATUS=$(tailscale status --json 2>/dev/null || echo '{}')
 TS_BACKEND=$(printf '%s' "$TS_STATUS" | jq -r '.BackendState // ""' 2>/dev/null || echo "")
 
@@ -740,13 +913,23 @@ EOF
             dimtext "Skipped Tailscale authentication"
             ;;
     esac
-fi
+fi  # end TS_BACKEND check
 
-# Get Tailscale IP
-TS_IP=$(tailscale ip --4 2>/dev/null | head -1 | tr -d ' ' || echo "")
+fi  # end TAILSCALE_AVAILABLE
+
+# Get Tailscale IP (or fallback)
+TS_IP=""
+if $TAILSCALE_AVAILABLE; then
+    TS_IP=$(tailscale ip --4 2>/dev/null | head -1 | tr -d ' ' || echo "")
+fi
 if [[ -z "$TS_IP" ]]; then
-    warn "No Tailscale IP detected — service will bind to 0.0.0.0"
-    TS_IP="0.0.0.0"
+    if [[ "$OS_TYPE" == "macOS" || "$OS_TYPE" == "WSL" ]]; then
+        dimtext "No Tailscale IP — service will bind to localhost"
+        TS_IP="127.0.0.1"
+    else
+        warn "No Tailscale IP detected — service will bind to 0.0.0.0"
+        TS_IP="0.0.0.0"
+    fi
 else
     ok "Tailscale IP: $TS_IP"
 fi
@@ -1381,8 +1564,10 @@ fi
 # ╚══════════════════════════════════════════════════════════╝
 step "Firewall & security hardening"
 
-printf "\n"
-draw_box << EOF
+if [[ "$OS_TYPE" == "Linux" ]]; then
+    # Firewall hardening only on Linux VPS/server
+    printf "\n"
+    draw_box << EOF
 ${BRED}${BOLD}Security Hardening${RST}
 
 UFW (firewall) blocks all incoming traffic except SSH
@@ -1391,32 +1576,31 @@ and Tailscale. Fail2ban protects against brute-force.
 ${BOLD}Briven binds ONLY to your Tailscale IP${RST} — it is
 never exposed on public interfaces.
 EOF
-printf "\n"
+    printf "\n"
 
-select_from_list "Enable UFW firewall + Fail2ban?" \
-    "Yes — enable firewall hardening (recommended)" \
-    "No  — skip security hardening"
+    select_from_list "Enable UFW firewall + Fail2ban?" \
+        "Yes — enable firewall hardening (recommended)" \
+        "No  — skip security hardening"
 
-if [[ "$SELECT_RESULT" -eq 1 ]]; then
-    # UFW configuration
-    if command -v ufw >/dev/null 2>&1; then
-        info "Configuring UFW firewall..."
-        sudo ufw default deny incoming 2>/dev/null || true
-        sudo ufw default allow outgoing 2>/dev/null || true
-        sudo ufw allow ssh 2>/dev/null || true
-        # Allow Tailscale subnet (100.64.0.0/10)
-        sudo ufw allow in on tailscale0 2>/dev/null || true
-        sudo ufw --force enable 2>/dev/null || true
-        ok "UFW enabled — SSH + Tailscale allowed, all else denied"
-    else
-        warn "UFW not available — skipping firewall setup"
-    fi
+    if [[ "$SELECT_RESULT" -eq 1 ]]; then
+        # UFW configuration
+        if command -v ufw >/dev/null 2>&1; then
+            info "Configuring UFW firewall..."
+            sudo ufw default deny incoming 2>/dev/null || true
+            sudo ufw default allow outgoing 2>/dev/null || true
+            sudo ufw allow ssh 2>/dev/null || true
+            sudo ufw allow in on tailscale0 2>/dev/null || true
+            sudo ufw --force enable 2>/dev/null || true
+            ok "UFW enabled — SSH + Tailscale allowed, all else denied"
+        else
+            warn "UFW not available — skipping firewall setup"
+        fi
 
-    # Fail2ban configuration
-    if command -v fail2ban-client >/dev/null 2>&1; then
-        info "Configuring Fail2ban..."
-        if [[ ! -f /etc/fail2ban/jail.local ]]; then
-            sudo tee /etc/fail2ban/jail.local > /dev/null << 'F2B'
+        # Fail2ban configuration
+        if command -v fail2ban-client >/dev/null 2>&1; then
+            info "Configuring Fail2ban..."
+            if [[ ! -f /etc/fail2ban/jail.local ]]; then
+                sudo tee /etc/fail2ban/jail.local > /dev/null << 'F2B'
 [DEFAULT]
 bantime  = 1h
 findtime = 10m
@@ -1428,14 +1612,21 @@ port    = ssh
 filter  = sshd
 logpath = /var/log/auth.log
 F2B
+            fi
+            sudo systemctl enable --now fail2ban 2>/dev/null || true
+            ok "Fail2ban enabled — SSH brute-force protection active"
+        else
+            warn "Fail2ban not available — skipping"
         fi
-        sudo systemctl enable --now fail2ban 2>/dev/null || true
-        ok "Fail2ban enabled — SSH brute-force protection active"
     else
-        warn "Fail2ban not available — skipping"
+        dimtext "Skipped firewall setup"
     fi
 else
-    dimtext "Skipped firewall setup"
+    # macOS / WSL — no UFW/Fail2ban needed
+    dimtext "Firewall hardening skipped (not applicable on $OS_TYPE)"
+    if [[ "$OS_TYPE" == "macOS" ]]; then
+        dimtext "macOS has its own built-in firewall (System Settings → Network → Firewall)"
+    fi
 fi
 
 # ╔══════════════════════════════════════════════════════════╗
@@ -1443,21 +1634,28 @@ fi
 # ╚══════════════════════════════════════════════════════════╝
 step "Tailscale ACL & system service"
 
-# ── Tailscale ACL (optional) ──────────────────────────────
-TS_API_KEY=""
-for envfile in "$INSTALL_DIR/usr/.env" "$INSTALL_DIR/.env"; do
-    if [[ -f "$envfile" ]]; then
-        val=$(grep -E "^TAILSCALE_API_KEY=" "$envfile" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
-        if [[ -n "${val:-}" ]]; then
-            TS_API_KEY="$val"
-            break
-        fi
-    fi
-done
+# Determine the bind address
+BIND_HOST="$TS_IP"
+if [[ "$BIND_HOST" == "0.0.0.0" || -z "$BIND_HOST" ]]; then
+    BIND_HOST="0.0.0.0"
+fi
 
-if [[ -z "$TS_API_KEY" ]]; then
-    printf "\n"
-    draw_box << EOF
+# ── Tailscale ACL (optional, only when Tailscale is available) ──
+if $TAILSCALE_AVAILABLE; then
+    TS_API_KEY=""
+    for envfile in "$INSTALL_DIR/usr/.env" "$INSTALL_DIR/.env"; do
+        if [[ -f "$envfile" ]]; then
+            val=$(grep -E "^TAILSCALE_API_KEY=" "$envfile" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
+            if [[ -n "${val:-}" ]]; then
+                TS_API_KEY="$val"
+                break
+            fi
+        fi
+    done
+
+    if [[ -z "$TS_API_KEY" ]]; then
+        printf "\n"
+        draw_box << EOF
 ${BRED}${BOLD}Tailscale ACL (Optional)${RST}
 
 ACL restricts Briven access to ${BOLD}tag:admin${RST} devices only.
@@ -1467,51 +1665,51 @@ ${BOLD}To get an API token:${RST}
   ${CYN}https://login.tailscale.com/admin/settings/keys${RST}
   → API access tokens → Generate
 EOF
-    printf "\n"
+        printf "\n"
 
-    TS_API_KEY=$(ask "  Tailscale API token (tskey-api-..., Enter to skip): ")
-fi
+        TS_API_KEY=$(ask "  Tailscale API token (tskey-api-..., Enter to skip): ")
+    fi
 
-if [[ -n "${TS_API_KEY:-}" ]]; then
-    set_env "TAILSCALE_API_KEY" "$TS_API_KEY"
-    ok "TAILSCALE_API_KEY saved"
+    if [[ -n "${TS_API_KEY:-}" ]]; then
+        set_env "TAILSCALE_API_KEY" "$TS_API_KEY"
+        ok "TAILSCALE_API_KEY saved"
 
-    # Only try --apply-acl if the script supports it
-    if "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/tools/tailscale.py" --help 2>&1 | grep -q "apply-acl"; then
-        info "Applying zero-trust ACL policy..."
-        ACL_OK=false
-        for attempt in 1 2; do
-            if "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/tools/tailscale.py" --apply-acl 2>&1; then
-                ACL_OK=true
-                break
+        if "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/tools/tailscale.py" --help 2>&1 | grep -q "apply-acl"; then
+            info "Applying zero-trust ACL policy..."
+            ACL_OK=false
+            for attempt in 1 2; do
+                if "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/tools/tailscale.py" --apply-acl 2>&1; then
+                    ACL_OK=true
+                    break
+                fi
+                [[ "$attempt" -eq 1 ]] && sleep 2
+            done
+
+            if $ACL_OK; then
+                ok "ACL applied — only tag:admin → tag:briven-server:$BRIVEN_PORT"
+            else
+                warn "ACL apply failed — configure ACL manually in Tailscale admin console"
             fi
-            [[ "$attempt" -eq 1 ]] && sleep 2
-        done
-
-        if $ACL_OK; then
-            ok "ACL applied — only tag:admin → tag:briven-server:$BRIVEN_PORT"
         else
-            warn "ACL apply failed — configure ACL manually in Tailscale admin console"
+            dimtext "ACL auto-apply not available — configure manually"
+            dimtext "Visit: https://login.tailscale.com/admin/acls"
         fi
     else
-        dimtext "ACL auto-apply not available — configure ACL manually in Tailscale admin console"
-        dimtext "Visit: https://login.tailscale.com/admin/acls"
+        dimtext "Skipped ACL — any tailnet device can access Briven"
     fi
 else
-    dimtext "Skipped ACL — any tailnet device can access Briven"
+    dimtext "Tailscale not installed — skipping ACL setup"
 fi
 
-# ── Systemd service ────────────────────────────────────────
-info "Creating systemd service..."
+# ── System service (platform-dependent) ────────────────────
+HAS_SYSTEMD=false
+SERVICE_OK=false
 
-# Determine the bind address — use Tailscale IP if available, else 0.0.0.0
-# so the Web UI is actually reachable
-BIND_HOST="$TS_IP"
-if [[ "$BIND_HOST" == "0.0.0.0" || -z "$BIND_HOST" ]]; then
-    BIND_HOST="0.0.0.0"
-fi
+if [[ "$OS_TYPE" == "Linux" ]] && command -v systemctl >/dev/null 2>&1; then
+    HAS_SYSTEMD=true
+    info "Creating systemd service..."
 
-sudo tee /etc/systemd/system/briven.service > /dev/null << UNIT
+    sudo tee /etc/systemd/system/briven.service > /dev/null << UNIT
 [Unit]
 Description=Briven AI Agent Framework
 After=network-online.target tailscaled.service
@@ -1538,36 +1736,74 @@ PrivateTmp=yes
 WantedBy=multi-user.target
 UNIT
 
-ok "Created /etc/systemd/system/briven.service"
+    ok "Created /etc/systemd/system/briven.service"
+else
+    # macOS / WSL — create a start script instead
+    info "Creating start script..."
+    cat > "$INSTALL_DIR/start.sh" << STARTSCRIPT
+#!/usr/bin/env bash
+# Start Briven — run this script to launch the Web UI
+cd "$INSTALL_DIR"
+source .venv/bin/activate
+exec uvicorn run_ui:app --host ${BIND_HOST} --port ${BRIVEN_PORT}
+STARTSCRIPT
+    chmod +x "$INSTALL_DIR/start.sh"
+    ok "Created $INSTALL_DIR/start.sh"
+fi
 
 # ╔══════════════════════════════════════════════════════════╗
 # ║              Step 10 — Start & Verify                    ║
 # ╚══════════════════════════════════════════════════════════╝
 step "Start Briven"
 
-sudo systemctl daemon-reload
-sudo systemctl enable --now briven
+if $HAS_SYSTEMD; then
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now briven
 
-info "Starting service..."
-sleep 5
+    info "Starting service..."
+    sleep 5
 
-# ── Status check with retry ──────────────────────────────
-SERVICE_OK=false
-for _check in 1 2 3; do
-    if sudo systemctl is-active --quiet briven; then
-        SERVICE_OK=true
-        break
+    # Status check with retry
+    for _check in 1 2 3; do
+        if sudo systemctl is-active --quiet briven; then
+            SERVICE_OK=true
+            break
+        fi
+        sleep 3
+    done
+
+    # If service failed, check why
+    if ! $SERVICE_OK; then
+        FAIL_LOG=$(journalctl -u briven --no-pager -n 20 2>/dev/null || echo "")
+        if echo "$FAIL_LOG" | grep -qi "ModuleNotFoundError\|ImportError"; then
+            warn "Service failed — missing Python dependency. Check: journalctl -u briven -n 50"
+        elif echo "$FAIL_LOG" | grep -qi "address already in use\|bind"; then
+            warn "Port $BRIVEN_PORT is already in use. Stop the existing process or change BRIVEN_PORT."
+        fi
     fi
-    sleep 3
-done
+else
+    # macOS / WSL — no systemd, just show how to start
+    info "No systemd available — Briven will not auto-start."
+    dimtext "Start Briven manually with:"
+    dimtext "  bash $INSTALL_DIR/start.sh"
+    printf "\n"
 
-# If service failed, check why and show helpful info
-if ! $SERVICE_OK; then
-    FAIL_LOG=$(journalctl -u briven --no-pager -n 20 2>/dev/null || echo "")
-    if echo "$FAIL_LOG" | grep -qi "ModuleNotFoundError\|ImportError"; then
-        warn "Service failed — missing Python dependency. Check: journalctl -u briven -n 50"
-    elif echo "$FAIL_LOG" | grep -qi "address already in use\|bind"; then
-        warn "Port $BRIVEN_PORT is already in use. Stop the existing process or change BRIVEN_PORT."
+    select_from_list "Start Briven now?" \
+        "Yes — start Briven in the background" \
+        "No  — I'll start it manually later"
+
+    if [[ "$SELECT_RESULT" -eq 1 ]]; then
+        info "Starting Briven..."
+        nohup bash "$INSTALL_DIR/start.sh" > "$INSTALL_DIR/briven.log" 2>&1 &
+        BRIVEN_PID=$!
+        sleep 3
+        if kill -0 "$BRIVEN_PID" 2>/dev/null; then
+            SERVICE_OK=true
+            ok "Briven started (PID: $BRIVEN_PID)"
+            dimtext "Log file: $INSTALL_DIR/briven.log"
+        else
+            warn "Briven failed to start. Check: cat $INSTALL_DIR/briven.log"
+        fi
     fi
 fi
 
@@ -1617,7 +1853,8 @@ else
 fi
 
 printf "\n"
-draw_box << EOF
+if $HAS_SYSTEMD; then
+    draw_box << EOF
 ${BOLD}Quick Reference${RST}
 
   ${BRED}Edit API keys:${RST}     nano $INSTALL_DIR/usr/.env
@@ -1630,18 +1867,36 @@ ${BOLD}Quick Reference${RST}
 ${DIM}Tailscale admin:  https://login.tailscale.com/admin${RST}
 ${DIM}Documentation:    https://github.com/flandriendev/briven${RST}
 EOF
+else
+    draw_box << EOF
+${BOLD}Quick Reference${RST}
+
+  ${BRED}Start Briven:${RST}      bash $INSTALL_DIR/start.sh
+  ${BRED}Edit API keys:${RST}     nano $INSTALL_DIR/usr/.env
+  ${BRED}Edit settings:${RST}     nano $INSTALL_DIR/usr/settings.json
+  ${BRED}Stop:${RST}              kill \$(lsof -ti:$BRIVEN_PORT)
+  ${BRED}Log file:${RST}          $INSTALL_DIR/briven.log
+
+${DIM}Documentation:    https://github.com/flandriendev/briven${RST}
+EOF
+fi
 
 if ! $SERVICE_OK; then
     printf "\n"
-    warn "Service may not be running. Try these commands:"
-    dimtext "  journalctl -u briven -n 50     # View recent logs"
-    dimtext "  sudo systemctl restart briven  # Restart the service"
-    dimtext "  sudo systemctl status briven   # Check current status"
+    if $HAS_SYSTEMD; then
+        warn "Service may not be running. Try these commands:"
+        dimtext "  journalctl -u briven -n 50     # View recent logs"
+        dimtext "  sudo systemctl restart briven  # Restart the service"
+        dimtext "  sudo systemctl status briven   # Check current status"
+    else
+        warn "Briven is not running. Start it with:"
+        dimtext "  bash $INSTALL_DIR/start.sh"
+    fi
 fi
 
 printf "\n"
 printf "  ${BRED}${BOLD}Thank you for installing Briven!${RST}\n"
-if [[ "$TS_IP" != "0.0.0.0" ]]; then
+if [[ "$TS_IP" != "0.0.0.0" && "$TS_IP" != "127.0.0.1" ]]; then
     printf "  ${DIM}Open ${ACCESS_URL} from any device on your tailnet.${RST}\n"
 else
     printf "  ${DIM}Open ${ACCESS_URL} to access the Web UI.${RST}\n"
