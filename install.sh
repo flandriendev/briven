@@ -1720,7 +1720,7 @@ Type=simple
 User=$RUN_USER
 WorkingDirectory=$INSTALL_DIR
 Environment="PATH=$INSTALL_DIR/.venv/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=$INSTALL_DIR/.venv/bin/uvicorn run_ui:app --host $BIND_HOST --port $BRIVEN_PORT
+ExecStart=$INSTALL_DIR/.venv/bin/python3 run_ui.py --host $BIND_HOST --port $BRIVEN_PORT
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -1745,7 +1745,7 @@ else
 # Start Briven — run this script to launch the Web UI
 cd "$INSTALL_DIR"
 source .venv/bin/activate
-exec uvicorn run_ui:app --host ${BIND_HOST} --port ${BRIVEN_PORT}
+exec python3 run_ui.py --host ${BIND_HOST} --port ${BRIVEN_PORT}
 STARTSCRIPT
     chmod +x "$INSTALL_DIR/start.sh"
     ok "Created $INSTALL_DIR/start.sh"
